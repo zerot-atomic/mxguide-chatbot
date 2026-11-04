@@ -1,4 +1,4 @@
-# MXGuide Chatbot · Balam
+# MXGuide Chatbot · MICHTLAN
 
 API del asistente de viaje de **MXGuide**. La app manda el mensaje del usuario y este servicio
 lo resuelve con agentes de IA (**Google Gemini** y **xAI Grok**), usando los lugares reales del
