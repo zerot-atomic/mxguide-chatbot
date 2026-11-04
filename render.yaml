@@ -1,0 +1,32 @@
+# Blueprint de Render: New + → Blueprint → elige este repo.
+# Las llaves (sync: false) se piden en el panel al crear el servicio; nunca van en el repo.
+services:
+  - type: web
+    name: mxguide-chatbot
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: GROK_MODEL
+        value: grok-4.7
+      - key: PRIMARY_PROVIDER
+        value: gemini
+      - key: CHAT_STRATEGY
+        value: fallback
+      - key: MXGUIDE_API_URL
+        value: https://mxguide-backend.onrender.com
+      - key: CHAT_API_KEY
+        generateValue: true
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "20"
