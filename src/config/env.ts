@@ -3,13 +3,13 @@
  * Se valida al arrancar: si algo está mal, el servidor no levanta
  * (mejor tronar al desplegar que fallar a medias con usuarios reales).
  */
-export type ProviderName = 'gemini' | 'grok';
+export type ProviderName = 'gemini' | 'groq';
 export type ChatStrategy = 'fallback' | 'race';
 
 export interface AppConfig {
   port: number;
   gemini: { apiKey?: string; model: string };
-  grok: { apiKey?: string; model: string };
+  groq: { apiKey?: string; model: string };
   primaryProvider: ProviderName;
   strategy: ChatStrategy;
   providerTimeoutMs: number;
@@ -43,9 +43,9 @@ function oneOf<T extends string>(name: string, raw: string | undefined, options:
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const geminiKey = blankToUndefined(env.GEMINI_API_KEY);
-  const xaiKey = blankToUndefined(env.XAI_API_KEY);
-  if (!geminiKey && !xaiKey) {
-    throw new Error('Configura al menos una llave de IA: GEMINI_API_KEY o XAI_API_KEY.');
+  const groqKey = blankToUndefined(env.GROQ_API_KEY);
+  if (!geminiKey && !groqKey) {
+    throw new Error('Configura al menos una llave de IA: GEMINI_API_KEY o GROQ_API_KEY.');
   }
 
   const apiUrl = blankToUndefined(env.MXGUIDE_API_URL)?.replace(/\/+$/, '');
@@ -56,11 +56,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     port: toInt('PORT', env.PORT, 3000, 1, 65535),
     gemini: { apiKey: geminiKey, model: blankToUndefined(env.GEMINI_MODEL) ?? 'gemini-3.6-flash' },
-    grok: { apiKey: xaiKey, model: blankToUndefined(env.GROK_MODEL) ?? 'grok-4.7' },
-    primaryProvider: oneOf('PRIMARY_PROVIDER', env.PRIMARY_PROVIDER, ['gemini', 'grok'] as const, 'gemini'),
+    groq: { apiKey: groqKey, model: blankToUndefined(env.GROQ_MODEL) ?? 'openai/gpt-oss-120b' },
+    primaryProvider: oneOf('PRIMARY_PROVIDER', env.PRIMARY_PROVIDER, ['gemini', 'groq'] as const, 'gemini'),
     strategy: oneOf('CHAT_STRATEGY', env.CHAT_STRATEGY, ['fallback', 'race'] as const, 'fallback'),
     providerTimeoutMs: toInt('PROVIDER_TIMEOUT_MS', env.PROVIDER_TIMEOUT_MS, 25000, 1000, 120000),
-    maxOutputTokens: toInt('MAX_OUTPUT_TOKENS', env.MAX_OUTPUT_TOKENS, 2048, 64, 32768),
+    maxOutputTokens: toInt('MAX_OUTPUT_TOKENS', env.MAX_OUTPUT_TOKENS, 4096, 64, 32768),
     mxguideApiUrl: apiUrl,
     placesTimeoutMs: toInt('PLACES_TIMEOUT_MS', env.PLACES_TIMEOUT_MS, 15000, 1000, 120000),
     chatApiKey: blankToUndefined(env.CHAT_API_KEY),

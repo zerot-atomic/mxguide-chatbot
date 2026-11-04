@@ -14,7 +14,7 @@ export interface LlmRequest {
   message: string;
 }
 
-/** Un "agente" de IA: Gemini, Grok o cualquiera que se agregue después. */
+/** Un "agente" de IA: Gemini, Groq o cualquiera que se agregue después. */
 export interface LlmProvider {
   readonly name: ProviderName;
   isConfigured(): boolean;

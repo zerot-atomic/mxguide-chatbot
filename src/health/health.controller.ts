@@ -19,7 +19,10 @@ export class HealthController {
       status: 'ok',
       strategy: this.config.strategy,
       primary: this.config.primaryProvider,
-      providers: { gemini: Boolean(this.config.gemini.apiKey), grok: Boolean(this.config.grok.apiKey) },
+      providers: {
+        gemini: Boolean(this.config.gemini.apiKey),
+        groq: Boolean(this.config.groq.apiKey),
+      },
     };
   }
 }

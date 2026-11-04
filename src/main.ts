@@ -23,9 +23,9 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   await app.listen(config.port, '0.0.0.0');
-  const providers = [config.gemini.apiKey && 'gemini', config.grok.apiKey && 'grok'].filter(Boolean).join(', ');
+  const providers = [config.gemini.apiKey && 'gemini', config.groq.apiKey && 'groq'].filter(Boolean).join(', ');
   new Logger('Bootstrap').log(
-    `Balam escuchando en el puerto ${config.port} · agentes: ${providers} · estrategia: ${config.strategy}`,
+    `Mitlan escuchando en el puerto ${config.port} · agentes: ${providers} · estrategia: ${config.strategy}`,
   );
 }
 

@@ -4,14 +4,14 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { ChatService } from '../src/chat/chat.service';
 import { GeminiProvider } from '../src/chat/providers/gemini.provider';
-import { GrokProvider } from '../src/chat/providers/grok.provider';
+import { GroqProvider } from '../src/chat/providers/groq.provider';
 import { LLM_PROVIDERS, LlmProvider, ProviderError } from '../src/chat/providers/llm-provider';
 import { APP_CONFIG, AppConfig, loadConfig } from '../src/config/env';
 import { PlacesService } from '../src/places/places.service';
 
-const baseEnv = { GEMINI_API_KEY: 'g-key', XAI_API_KEY: 'x-key' };
+const baseEnv = { GEMINI_API_KEY: 'g-key', GROQ_API_KEY: 'q-key' };
 
-function fakeProvider(name: 'gemini' | 'grok', behavior: () => Promise<string>): LlmProvider & { calls: number } {
+function fakeProvider(name: 'gemini' | 'groq', behavior: () => Promise<string>): LlmProvider & { calls: number } {
   const provider = {
     name,
     calls: 0,
@@ -28,7 +28,7 @@ const noPlaces = { getContext: async () => [] } as unknown as PlacesService;
 
 describe('loadConfig', () => {
   it('exige al menos una llave de IA', () => {
-    expect(() => loadConfig({})).toThrow(/GEMINI_API_KEY o XAI_API_KEY/);
+    expect(() => loadConfig({})).toThrow(/GROQ_API_KEY/);
   });
 
   it('usa valores por defecto razonables', () => {
@@ -56,18 +56,12 @@ describe('extracción de texto de cada proveedor', () => {
     expect(() => GeminiProvider.extractText({ promptFeedback: { blockReason: 'SAFETY' } })).toThrow(ProviderError);
   });
 
-  it('Grok: lee output[].content[].text de la Responses API', () => {
-    const text = GrokProvider.extractText({
-      output: [
-        { type: 'reasoning', content: [] },
-        { type: 'message', content: [{ type: 'output_text', text: '¡Vamos a Puebla!' }] },
-      ],
-    });
-    expect(text).toBe('¡Vamos a Puebla!');
+  it('Groq: lee choices[0].message.content', () => {
+    expect(GroqProvider.extractText({ choices: [{ message: { content: ' Hola ' } }] })).toBe('Hola');
   });
 
-  it('Grok: falla con respuesta vacía', () => {
-    expect(() => GrokProvider.extractText({ output: [] })).toThrow(ProviderError);
+  it('Groq: falla con respuesta vacía', () => {
+    expect(() => GroqProvider.extractText({ choices: [{ message: { content: null } }] })).toThrow(ProviderError);
   });
 });
 
@@ -79,28 +73,28 @@ describe('ChatService (orquestador)', () => {
     const gemini = fakeProvider('gemini', async () => {
       throw new ProviderError('gemini', 'HTTP 500');
     });
-    const grok = fakeProvider('grok', async () => 'Te recomiendo la Catedral de Puebla.');
-    const service = new ChatService(config, [grok, gemini], noPlaces);
+    const groq = fakeProvider('groq', async () => 'Te recomiendo la Catedral de Puebla.');
+    const service = new ChatService(config, [groq, gemini], noPlaces);
 
     const result = await service.chat(dto);
-    expect(result.provider).toBe('grok');
+    expect(result.provider).toBe('groq');
     expect(gemini.calls).toBe(1);
   });
 
   it('fallback: usa primero el PRIMARY_PROVIDER aunque venga después en la lista', async () => {
-    const config = loadConfig({ ...baseEnv, PRIMARY_PROVIDER: 'grok' });
+    const config = loadConfig({ ...baseEnv, PRIMARY_PROVIDER: 'groq' });
     const gemini = fakeProvider('gemini', async () => 'gemini');
-    const grok = fakeProvider('grok', async () => 'grok');
-    const service = new ChatService(config, [gemini, grok], noPlaces);
+    const groq = fakeProvider('groq', async () => 'groq');
+    const service = new ChatService(config, [gemini, groq], noPlaces);
 
-    expect((await service.chat(dto)).provider).toBe('grok');
+    expect((await service.chat(dto)).provider).toBe('groq');
     expect(gemini.calls).toBe(0);
   });
 
   it('race: se queda con la primera respuesta válida', async () => {
     const config = loadConfig({ ...baseEnv, CHAT_STRATEGY: 'race' });
     const slow = fakeProvider('gemini', () => new Promise((r) => setTimeout(() => r('lento'), 50)));
-    const fast = fakeProvider('grok', async () => 'rápido');
+    const fast = fakeProvider('groq', async () => 'rápido');
     const service = new ChatService(config, [slow, fast], noPlaces);
 
     expect((await service.chat(dto)).reply).toBe('rápido');
@@ -111,7 +105,7 @@ describe('ChatService (orquestador)', () => {
     const broken = async () => {
       throw new ProviderError('gemini', 'caído');
     };
-    const service = new ChatService(config, [fakeProvider('gemini', broken), fakeProvider('grok', broken)], noPlaces);
+    const service = new ChatService(config, [fakeProvider('gemini', broken), fakeProvider('groq', broken)], noPlaces);
     await expect(service.chat(dto)).rejects.toMatchObject({ status: 503 });
   });
 
@@ -153,7 +147,7 @@ describe('PlacesService.toSummary', () => {
 
 describe('API HTTP', () => {
   let app: INestApplication;
-  const reply = fakeProvider('gemini', async () => '¡Hola! Soy Balam.');
+  const reply = fakeProvider('gemini', async () => '¡Hola! Soy Mitlan.');
 
   async function createApp(env: Record<string, string>) {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -175,13 +169,13 @@ describe('API HTTP', () => {
   it('GET /health', async () => {
     app = await createApp({});
     const res = await request(app.getHttpServer()).get('/health').expect(200);
-    expect(res.body.providers).toEqual({ gemini: true, grok: true });
+    expect(res.body.providers).toEqual({ gemini: true, groq: true });
   });
 
   it('POST /chat responde', async () => {
     app = await createApp({});
     const res = await request(app.getHttpServer()).post('/chat').send({ message: 'Hola' }).expect(200);
-    expect(res.body).toMatchObject({ reply: '¡Hola! Soy Balam.', provider: 'gemini', places: [] });
+    expect(res.body).toMatchObject({ reply: '¡Hola! Soy Mitlan.', provider: 'gemini', places: [] });
     expect(res.body.suggestions.length).toBeGreaterThan(0);
   });
 
