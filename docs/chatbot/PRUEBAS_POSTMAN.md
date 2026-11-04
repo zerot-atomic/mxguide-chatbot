@@ -17,3 +17,11 @@ No se ejecutó POST /chat contra proveedores reales ni se desplegó esta impleme
 9. Múltiples estados o negaciones deben pedir aclaración. No simular errores cambiando Render o credenciales: esas rutas están cubiertas con mocks.
 
 Verificar siempre reply string, provider gemini|groq, places array y suggestions array. No guardar llaves, coordenadas personales o conversaciones sensibles en evidencias compartidas.
+
+## Fase 2: validación manual pendiente
+No ejecutada en esta fase. Probar históricos, arqueología, museos, naturaleza, religión, hospedaje, gastronomía, restaurantes y comida típica en un estado con asociaciones reales. Comparar IDs con /places?stateId=UUID&limit=15; confirmar que todas las asociaciones cuentan. Cultural no garantiza subtipo museo; Gastronomía no garantiza restaurante ni platillo visitable.
+Comparar «¿Qué hay cerca de mí?» con ubicación (Top 10 general funcional aunque falten categorías) frente a «museos cerca de mí», «hoteles cerca de mí» y «restaurantes cerca de mí» (aviso de limitación si nearby carece de categorías). Confirmar contrato Flutter sin nuevas propiedades y sin consultas individuales de detalle. Cualquier prueba POST con candidatos confirmados puede consumir IA; las 99 automatizadas usan mocks. No cambiar Render ni backend para simular escenarios.
+
+## Corrección Puebla: evidencia y validación pendiente
+Diagnóstico previo mediante GET: Puebla limit=15 → 15 registros, cero Gastronomía; limit=100 → 100 registros, diez Gastronomía, con el mismo prefijo de quince. No hubo IA en ese diagnóstico. La regresión de la corrección usa únicamente mocks.
+Pendiente tras esta corrección: probar POST /chat con «¿Qué comida típica puedo encontrar en Puebla?» y comparar candidatos con la muestra de /places?stateId={{pueblaId}}&limit=100. No ejecutar este POST con IA real como parte de los tests automatizados. Confirmar máximo 15 candidatos, IDs originales y ninguna afirmación de exhaustividad. Una consulta estatal general debe seguir solicitando limit=15. Conservar prueba general cercana Top 10. No hay nuevas pruebas manuales ejecutadas de la implementación corregida.

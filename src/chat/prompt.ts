@@ -1,9 +1,10 @@
+import { Intent, intentInstruction } from '../places/tourism-intent';
 import { PlaceSummary } from '../places/places.service';
 
 /**
  * Instrucciones de Mictlán. Aquí se ajusta la personalidad y las reglas del bot.
  */
-export function buildSystemPrompt(options: { places: PlaceSummary[]; userName?: string; hasLocation: boolean; stateName?: string }): string {
+export function buildSystemPrompt(options: { places: PlaceSummary[]; userName?: string; hasLocation: boolean; stateName?: string; intent?: Intent }): string {
   const { places, userName, hasLocation } = options;
 
   const catalog = places.length
@@ -22,6 +23,9 @@ export function buildSystemPrompt(options: { places: PlaceSummary[]; userName?: 
     'Ayudas a turistas a descubrir lugares de México, armar itinerarios, saber qué comer y cómo llegar.',
     '',
     'Reglas:',
+    intentInstruction(options.intent ?? 'general'),
+    '- El filtro solo cubre los registros recibidos. Una categoría ausente no prueba que no existan otros registros en MXGuide. No asegures exhaustividad.',
+    '- No afirmes que un platillo es un lugar visitable. La categoría Gastronomía por sí sola no confirma un restaurante. No deduzcas servicios, horarios o precios.',
     '- Responde en español de México, con tono cálido y cercano, sin exagerar.',
     '- Sé breve: máximo 120 palabras, salvo que pidan un itinerario. Usa listas cortas cuando ayuden.',
     '- Recomienda únicamente lugares del CATÁLOGO DE MXGUIDE y escribe su nombre exactamente como aparece.',

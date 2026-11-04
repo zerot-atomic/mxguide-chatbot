@@ -25,3 +25,9 @@ Los avisos conservan HTTP 200 y reply/provider/places/suggestions. Sin proveedor
 El prompt solo recomienda candidatos confirmados y distingue información cultural general. No se envían IDs ni campos internos innecesarios al modelo. Las tarjetas se asocian por nombre normalizado con límites de palabras; se omiten nombres duplicados o contenidos en otros candidatos para evitar asociaciones dudosas. Esta heurística puede omitir tarjetas válidas y no interpreta negaciones en la respuesta de IA; no es extracción semántica estructurada.
 
 No se modifican DTO, controlador, .env, README principal, Flutter, backend principal, base de datos, Render ni proveedores. No hay migraciones, despliegue, commits o push.
+
+## Fase 2: categorías
+Ver FASE2_CATEGORIAS.md para los siete nombres oficiales, reglas y limitaciones. Se reutilizan solo asociaciones recibidas, sin UUID fijos o endpoints nuevos. El Top 10 general no depende de categorías. Una consulta específica sin categorías disponibles devuelve un aviso local; no hace N+1 ni inventa tipos. Se mantiene el contrato público incluido provider para avisos locales, según la decisión de fase 1.
+
+## Actualización: recuperación frente a selección
+Las consultas estatales específicas recuperan una muestra de hasta 100; generales solicitan 15. Todas siguen seleccionando como máximo 15 candidatos para IA. Esta decisión sustituye el límite remoto uniforme de fase 1 y la primera implementación de fase 2. No introduce paginación ni exhaustividad; cero coincidencias solo se refiere a la muestra. Nearby y su orden de selección siguen iguales.

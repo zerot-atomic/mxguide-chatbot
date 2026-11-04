@@ -52,7 +52,7 @@ export class ChatService {
     const notice = ChatService.catalogNotice(context);
     if (notice) return { reply: notice, provider: providers[0].name, places: [], suggestions: buildSuggestions(false) };
     const request: LlmRequest = {
-      system: buildSystemPrompt({ places, userName: dto.userName, hasLocation: nearby, stateName: context.state?.name }),
+      system: buildSystemPrompt({ places, userName: dto.userName, hasLocation: nearby, stateName: context.state?.name, intent: context.intent }),
       history: (dto.history ?? []).slice(-12),
       message: dto.message.trim(),
     };
@@ -70,8 +70,10 @@ export class ChatService {
 
   private static catalogNotice(context: CatalogContext): string | undefined {
     switch (context.status) {
+      case 'categories-unavailable': return 'El catálogo recibido no permite confirmar las categorías para esta búsqueda. Puedes indicar un estado o explorar lugares variados; no puedo asegurar este filtro de cercanía con los datos disponibles.';
+      case 'intent-ambiguous': return '¿Qué tipo de lugares prefieres: atractivos turísticos, hospedaje o gastronomía? Tu solicitud combina tipos o exclusiones que necesito aclarar.';
       case 'found': return undefined;
-      case 'empty': return `La consulta${context.state ? ` de ${context.state.name}` : ''} no devolvió lugares disponibles en MXGuide. ¿Quieres buscar otro destino?`;
+      case 'empty': return `La consulta${context.state ? ` de ${context.state.name}` : ''} no devolvió coincidencias confirmadas para el tipo solicitado entre los registros recibidos de MXGuide. ¿Quieres buscar otro destino?`;
       case 'ambiguous': return '¿Qué estado quieres consultar? Mencionaste varios destinos o una exclusión; prefiero confirmar antes de recomendarte lugares.';
       case 'unrecognized': return '¿Puedes escribir el nombre completo del estado tal como aparece en MXGuide? Si te refieres a México, aclara si buscas Ciudad de México, Estado de México o destinos del país.';
       case 'missing-location': return 'Comparte tu ubicación para buscar lugares cerca de ti, o dime qué estado quieres visitar.';

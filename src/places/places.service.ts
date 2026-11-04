@@ -1,3 +1,4 @@
+import { Intent, classifyIntent, categoryNames, matchesIntent } from './tourism-intent';
 import { Inject, Injectable } from '@nestjs/common';
 import { APP_CONFIG, AppConfig } from '../config/env';
 import { CatalogState, normalize, resolveState } from './state-resolver';
@@ -13,12 +14,13 @@ export interface Coordinates {
     lat: number;
     lng: number;
 }
-export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured';
+export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous';
 export interface CatalogContext {
     status: CatalogStatus;
     mode: 'state' | 'nearby' | 'featured';
     places: PlaceSummary[];
     state?: CatalogState;
+    intent?: Intent;
 }
 const TTL = 600000;
 const obj = (r: unknown): Record<string, unknown> | undefined => r !== null && typeof r === 'object' && !Array.isArray(r) ? r as Record<string, unknown> : undefined;
@@ -35,7 +37,7 @@ export class PlacesService {
     private statesPending?: Promise<CatalogState[]>;
     private featuredCache?: {
         at: number;
-        value: PlaceSummary[];
+        value: unknown[];
     };
     constructor(
     @Inject(APP_CONFIG)
@@ -46,6 +48,7 @@ export class PlacesService {
     }[] = []): Promise<CatalogContext> {
         let mode: CatalogContext['mode'] = 'featured';
         let state: CatalogState | undefined;
+        const intent = classifyIntent(message);
         try {
             if (!this.config.mxguideApiUrl)
                 throw new CatalogError('unconfigured');
@@ -67,19 +70,30 @@ export class PlacesService {
                 mode = 'nearby';
             if (mode === 'nearby' && (!location || !Number.isFinite(location.lat) || !Number.isFinite(location.lng) || Math.abs(location.lat) > 90 || Math.abs(location.lng) > 180))
                 return { status: 'missing-location', mode, places: [] };
-            let places: PlaceSummary[];
+            if (intent === 'ambiguous') return { status: 'intent-ambiguous', mode, state, intent, places: [] };
+            let raw: unknown[];
             if (mode === 'featured' && this.featuredCache && Date.now() - this.featuredCache.at < TTL)
-                places = this.featuredCache.value;
+                raw = this.featuredCache.value;
             else {
-                const path = state ? `/places?${new URLSearchParams({ stateId: state.id, limit: '15' })}` : mode === 'nearby'
+                // Retrieval sample and final AI candidate limit are deliberately separate.
+                const stateFetchLimit = intent === 'general' ? 15 : 100;
+                const path = state ? `/places?${new URLSearchParams({ stateId: state.id, limit: String(stateFetchLimit) })}` : mode === 'nearby'
                     ? `/places/nearby?${new URLSearchParams({ lat: String(location!.lat), lng: String(location!.lng), radius: '50', limit: '10' })}` : '/places/featured?limit=20';
-                const raw = await this.fetchArray(path);
+                raw = await this.fetchArray(path);
+                if (state && intent !== 'general') raw = raw.slice(0, stateFetchLimit);
+
+            }
+            {
                 let candidates = raw.filter(p => !state || obj(p)?.stateId === state.id).map(p => PlacesService.toSummary(p, states)).filter((p): p is PlaceSummary => p !== null);
                 if (raw.length && !candidates.length)
                     throw new CatalogError('malformed');
+                if (mode === 'featured' && (!this.featuredCache || Date.now() - this.featuredCache.at >= TTL)) this.featuredCache = { at: Date.now(), value: raw };
+                if (intent !== 'general' && raw.length && !raw.some(p => categoryNames(p).length)) return { status: 'categories-unavailable', mode, state, intent, places: [] };
+                candidates = raw.filter(p => (!state || obj(p)?.stateId === state.id) && matchesIntent(p, intent)).map(p => PlacesService.toSummary(p, states)).filter((p): p is PlaceSummary => p !== null);
                 if (mode === 'nearby') {
+                    const hadMatches = candidates.length > 0;
                     candidates = candidates.filter(p => p.distanceKm !== undefined).sort((a, b) => a.distanceKm! - b.distanceKm! || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-                    if (raw.length && !candidates.length)
+                    if (hadMatches && !candidates.length)
                         throw new CatalogError('malformed');
                 }
                 // Sorting before deduplication retains the smallest valid distance for each ID.
@@ -87,11 +101,10 @@ export class PlacesService {
                 for (const p of candidates)
                     if (!unique.has(p.id))
                         unique.set(p.id, p);
-                places = [...unique.values()].slice(0, mode === 'nearby' ? 10 : mode === 'state' ? 15 : 20);
-                if (mode === 'featured')
-                    this.featuredCache = { at: Date.now(), value: places };
+                const places = [...unique.values()].slice(0, mode === 'nearby' ? 10 : mode === 'state' ? 15 : 20);
+                return { status: places.length ? 'found' : 'empty', mode, state, intent, places };
             }
-            return { status: places.length ? 'found' : 'empty', mode, state, places };
+
         }
         catch (error) {
             return { status: error instanceof CatalogError ? error.status : 'malformed', mode, state, places: [] };
@@ -144,7 +157,7 @@ export class PlacesService {
             return null;
         const nested = obj(p.state)?.name;
         const state = states.find(s => s.id === p.stateId)?.name ?? (typeof nested === 'string' ? nested : '');
-        const category = Array.isArray(p.categories) ? obj(obj(p.categories[0])?.category)?.name : undefined;
+        const category = categoryNames(p).join(' · ');
         const distance = p.distanceKm;
         return { id: p.id, name: p.name.slice(0, 120), state, category: typeof category === 'string' ? category : '', description: typeof p.shortDescription === 'string' ? p.shortDescription.slice(0, 240) : '', distanceKm: typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 ? distance : undefined };
     }
