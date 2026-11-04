@@ -1,7 +1,9 @@
+import { previousRecommendationIds } from './followup-context';
+import { readBoundedJson, hasExternalReference } from '../common/external-data';
 import { Intent, classifyIntent, categoryNames, matchesIntent } from './tourism-intent';
 import { Inject, Injectable } from '@nestjs/common';
 import { APP_CONFIG, AppConfig } from '../config/env';
-import { CatalogState, normalize, resolveState } from './state-resolver';
+import { CatalogState, normalize, resolveState, resolveHistoryState } from './state-resolver';
 export interface PlaceSummary {
     id: string;
     name: string;
@@ -14,7 +16,7 @@ export interface Coordinates {
     lat: number;
     lng: number;
 }
-export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous';
+export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous' | 'followup-ambiguous';
 export interface CatalogContext {
     status: CatalogStatus;
     mode: 'state' | 'nearby' | 'featured';
@@ -55,11 +57,7 @@ export class PlacesService {
             const states = await this.getStates();
             let resolution = resolveState(message, states);
             const nearby = /\b(cerca de mi|cercanos|cercanas|mas lugares cerca)\b/.test(normalize(message));
-            if (resolution.kind === 'general' && !nearby && /^(y |y$|cuales|que otros|mas lugares|arma mi itinerario|como llegar)/.test(normalize(message))) {
-                const previous = history.slice(-12).filter(t => t.role === 'user').at(-1);
-                if (previous)
-                    resolution = resolveState(previous.content, states);
-            }
+            if (resolution.kind === 'general' && !nearby) resolution = resolveHistoryState(message, history, states);
             if (resolution.kind === 'ambiguous' || resolution.kind === 'unrecognized')
                 return { status: resolution.kind, mode, places: [] };
             if (resolution.kind === 'state') {
@@ -89,6 +87,13 @@ export class PlacesService {
                     throw new CatalogError('malformed');
                 if (mode === 'featured' && (!this.featuredCache || Date.now() - this.featuredCache.at >= TTL)) this.featuredCache = { at: Date.now(), value: raw };
                 if (intent !== 'general' && raw.length && !raw.some(p => categoryNames(p).length)) return { status: 'categories-unavailable', mode, state, intent, places: [] };
+                if (/\b(de esos|de esas|de los anteriores|de las anteriores)\b/.test(normalize(message))) {
+                    const previousIds = previousRecommendationIds(history, candidates);
+                    if (!previousIds) return { status: 'followup-ambiguous', mode, state, intent, places: [] };
+                    candidates = candidates.filter(p => previousIds.has(p.id));
+                    const allowedIds = new Set(candidates.map(p => p.id));
+                    raw = raw.filter(p => allowedIds.has(obj(p)?.id as string));
+                }
                 candidates = raw.filter(p => (!state || obj(p)?.stateId === state.id) && matchesIntent(p, intent)).map(p => PlacesService.toSummary(p, states)).filter((p): p is PlaceSummary => p !== null);
                 if (mode === 'nearby') {
                     const hadMatches = candidates.length > 0;
@@ -133,16 +138,15 @@ export class PlacesService {
     private async fetchArray(path: string): Promise<unknown[]> {
         let response: Response;
         try {
-            response = await fetch(`${this.config.mxguideApiUrl}${path}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(this.config.placesTimeoutMs) });
+            response = await fetch(`${this.config.mxguideApiUrl}${path}`, { redirect: 'error', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(this.config.placesTimeoutMs) });
         }
         catch (error) {
             throw new CatalogError(obj(error)?.name === 'TimeoutError' ? 'timeout' : 'connection');
         }
-        if (!response.ok)
-            throw new CatalogError('http');
+        if (!response.ok) { await response.body?.cancel(); throw new CatalogError('http'); }
         let data: unknown;
         try {
-            data = await response.json();
+            data = await readBoundedJson(response, 2 * 1024 * 1024);
         }
         catch (error) {
             throw new CatalogError(obj(error)?.name === 'TimeoutError' ? 'timeout' : 'malformed');
@@ -153,12 +157,12 @@ export class PlacesService {
     }
     static toSummary(raw: unknown, states: CatalogState[] = []): PlaceSummary | null {
         const p = obj(raw);
-        if (!p || !validId(p.id) || typeof p.name !== 'string' || !p.name.trim())
+        if (!p || !validId(p.id) || typeof p.name !== 'string' || !p.name.trim() || hasExternalReference(p.name))
             return null;
         const nested = obj(p.state)?.name;
         const state = states.find(s => s.id === p.stateId)?.name ?? (typeof nested === 'string' ? nested : '');
         const category = categoryNames(p).join(' · ');
         const distance = p.distanceKm;
-        return { id: p.id, name: p.name.slice(0, 120), state, category: typeof category === 'string' ? category : '', description: typeof p.shortDescription === 'string' ? p.shortDescription.slice(0, 240) : '', distanceKm: typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 ? distance : undefined };
+        return { id: p.id, name: p.name.slice(0, 120), state: hasExternalReference(state) ? '' : state, category: typeof category === 'string' && !hasExternalReference(category) ? category : '', description: typeof p.shortDescription === 'string' && !hasExternalReference(p.shortDescription) ? p.shortDescription.slice(0, 240) : '', distanceKm: typeof distance === 'number' && Number.isFinite(distance) && distance >= 0 ? distance : undefined };
     }
 }

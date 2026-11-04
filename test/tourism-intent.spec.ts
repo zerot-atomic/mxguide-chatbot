@@ -93,9 +93,9 @@ it('regresión Puebla: comida típica fuera de los primeros 15 se recupera entre
  const requests: import('../src/chat/providers/llm-provider').LlmRequest[] = [];
  const chat = new ChatService(config, [{ name: 'gemini', isConfigured: () => true, generate: async r => { requests.push(r); return JSON.stringify({placeIds:[id(115)]}); } }], service);
  const response = await chat.chat({message});
- const lines = requests[0].system.split('\n').filter(line => line.startsWith('- Registro '));
+ const lines = JSON.parse(requests[0].message).candidates;
  expect(lines).toHaveLength(15);
- expect(lines).toEqual(context.places.map(p => `- ${p.name} (${p.category} · Puebla · a ${p.distanceKm} km)`));
+ expect(lines.map((p: {id:string})=>p.id)).toEqual(context.places.map(p=>p.id));
  expect(response.places.map(p => p.id)).toEqual([id(115)]);
  expect(Object.keys(response).sort()).toEqual(['places', 'provider', 'reply', 'suggestions']);
  // General queries keep the original recovery size, even in the same service instance.

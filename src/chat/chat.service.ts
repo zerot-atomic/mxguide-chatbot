@@ -1,3 +1,5 @@
+import { personalizeReply } from './personalization';
+import { redactSelectionText } from '../common/external-data';
 import { verifiedRecommendation } from './verified-recommendation';
 import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { APP_CONFIG, AppConfig, ProviderName } from '../config/env';
@@ -50,12 +52,15 @@ export class ChatService {
     const context = await this.places.getContext(dto.location, dto.message, dto.history);
     const { places } = context;
     const nearby = context.mode === 'nearby' && context.status === 'found';
+    const personalize = (reply: string) => personalizeReply(reply, dto.userName ? redactSelectionText(dto.userName, [this.config.gemini.apiKey, this.config.groq.apiKey, this.config.chatApiKey]) : undefined);
     const notice = ChatService.catalogNotice(context);
-    if (notice) return { reply: notice, provider: providers[0].name, places: [], suggestions: buildSuggestions(false) };
+    if (notice) return { reply: personalize(notice), provider: providers[0].name, places: [], suggestions: buildSuggestions(false) };
+    const secrets = [this.config.gemini.apiKey, this.config.groq.apiKey, this.config.chatApiKey];
+    const safe = (text: string) => redactSelectionText(text, secrets);
     const request: LlmRequest = {
-      system: buildSystemPrompt({ places, userName: dto.userName, hasLocation: nearby, stateName: context.state?.name, intent: context.intent }),
-      history: (dto.history ?? []).slice(-12),
-      message: dto.message.trim(),
+      system: buildSystemPrompt({ places, hasLocation: nearby, intent: context.intent }),
+      history: [],
+      message: JSON.stringify({ query: safe(dto.message.trim()), intent: context.intent ?? 'general', candidates: places.map(p => ({id:p.id,name:safe(p.name),category:safe(p.category),state:safe(p.state)})) }),
     };
 
     const { text, provider } =
@@ -64,6 +69,7 @@ export class ChatService {
     const verified = verifiedRecommendation(text, context);
     return {
       ...verified,
+      reply: personalize(verified.reply),
       provider,
       suggestions: buildSuggestions(nearby),
     };
@@ -73,6 +79,7 @@ export class ChatService {
     switch (context.status) {
       case 'categories-unavailable': return 'El catálogo recibido no permite confirmar las categorías para esta búsqueda. Puedes indicar un estado o explorar lugares variados; no puedo asegurar este filtro de cercanía con los datos disponibles.';
       case 'intent-ambiguous': return '¿Qué tipo de lugares prefieres: atractivos turísticos, hospedaje o gastronomía? Tu solicitud combina tipos o exclusiones que necesito aclarar.';
+      case 'followup-ambiguous': return '¿Cuáles lugares de la respuesta anterior quieres comparar? Puedes repetir sus nombres o indicar el estado para hacer una nueva búsqueda.';
       case 'found': return undefined;
       case 'empty': return `La consulta${context.state ? ` de ${context.state.name}` : ''} no devolvió coincidencias confirmadas para el tipo solicitado entre los registros recibidos de MXGuide. ¿Quieres buscar otro destino?`;
       case 'ambiguous': return '¿Qué estado quieres consultar? Mencionaste varios destinos o una exclusión; prefiero confirmar antes de recomendarte lugares.';

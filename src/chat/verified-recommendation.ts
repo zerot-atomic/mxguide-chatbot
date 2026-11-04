@@ -1,3 +1,4 @@
+import { hasExternalReference } from '../common/external-data';
 import { normalize } from '../places/state-resolver';
 import { Intent } from '../places/tourism-intent';
 import { CatalogContext, PlaceSummary } from '../places/places.service';
@@ -55,7 +56,7 @@ const introductions: Partial<Record<Intent, string>> & { general: string } = {
 };
 
 function displayText(value: string): string {
-  return value.replace(/[\r\n\t]/g, ' ').replace(/[<>*_`\[\]\\]/g, char => '\\' + char);
+  return (hasExternalReference(value) ? 'Texto no disponible' : value).replace(/[\r\n\t]/g, ' ').replace(/[<>*_`\[\]\\]/g, char => '\\' + char);
 }
 
 function generalType(category: string): string {
@@ -69,7 +70,7 @@ function briefDescription(description: string): string {
   const text = description.trim();
   const normalized = normalize(text);
   // A conservative exclusion gate, not a semantic verifier. Omit the whole description on doubt.
-  if (!text || text.length > 160 || /[0-9<>*`\[\]{}\r\n]|https?:|www\./i.test(text)) return '';
+  if (hasExternalReference(text) || !text || text.length > 160 || /[0-9<>*`\[\]{}\r\n]|https?:|www\./i.test(text)) return '';
   if (/\b(abiert\w*|cerrad\w*|horari\w*|precio\w*|costo\w*|tarifa\w*|gratis|gratuit\w*|entrada\w*|servicio\w*|disponib\w*|reserva\w*|incluy\w*|incluid\w*|ofrece\w*|ofrecen|cuenta|wifi|estacionamiento|desayuno|piscina|alberca|telefono|contacto|garantiz\w*|siempre|nunca|instruccion\w*|ignora\w*|olvida\w*|recomienda\w*|visita|visiten|debes|debe|prompt|system|assistant|usuario|modelo|groq|gemini|json|uuid|respuesta|revela\w*|ejecuta\w*)\b/.test(normalized)) return '';
   return text;
 }

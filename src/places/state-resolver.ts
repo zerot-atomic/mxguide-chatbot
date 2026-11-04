@@ -19,3 +19,17 @@ export function resolveState(message: string, states: CatalogState[]): Resolutio
         return { kind: 'state', state: longest[0] };
     return { kind: /\b(mexico|estado)\b/.test(text) ? 'unrecognized' : 'general' };
 }
+
+/** Follow only a contiguous chain of recognized continuations, bounded to 12 turns. */
+export function resolveHistoryState(message: string, history: {role:string;content:string}[], states: CatalogState[]): Resolution {
+    const continues = (text: string) => /^(y |y$|cuales|que otros|mas lugares|arma mi itinerario|como llegar)/.test(normalize(text))
+        || /\b(alli|ahi|en ese estado|en el mismo estado|de esos|de esas|de los anteriores|de las anteriores)\b/.test(normalize(text));
+    if (!continues(message)) return {kind:'general'};
+    const users = history.slice(-12).filter(t => t.role === 'user').reverse();
+    for (const turn of users) {
+        const resolution = resolveState(turn.content, states);
+        if (resolution.kind !== 'general') return resolution;
+        if (!continues(turn.content)) break;
+    }
+    return {kind:'general'};
+}

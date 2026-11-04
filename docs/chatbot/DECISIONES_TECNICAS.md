@@ -34,3 +34,7 @@ Las consultas estatales específicas recuperan una muestra de hasta 100; general
 
 ## Fase 3: identidad y texto público
 La salida del modelo selecciona IDs y nunca proporciona datos de tarjetas o texto público. El servidor valida membresía exacta y genera reply desde los mismos objetos de places. Esta decisión sustituye la asociación por nombres en el flujo y la publicación directa de prosa. Ante selección inválida se usa fallback local sin nuevos consumos de IA. JSON es una convención de texto con validación local, no una función nativa supuesta de los proveedores. Detalles y limitaciones de redacción en FASE3_VERACIDAD.md.
+
+## Fase 4: límites de confianza
+Las instrucciones de sistema son estáticas. Query y candidatos se envían como JSON de datos en rol user; historial solo se utiliza localmente. El filtro de IDs y renderer de fase 3 son la barrera efectiva, no una detección por palabras de ataques. La IA no adquiere herramientas ni capacidad de elegir destinos HTTP.
+Se limitan bytes de respuestas externas, se rechazan redirects y se sanitizan errores sin cuerpos remotos. Parser JSON de 64 KiB y filtro público comparten configuración entre pruebas y bootstrap. No se cambia el esquema x-api-key, la estrategia ni provider para avisos locales; sus limitaciones se documentan. Menos contexto personal, sin prometer anonimización completa de preguntas libres. Cambios de JWT, proxy/infraestructura o contrato requieren coordinación y aprobación futura. Ver FASE4_SEGURIDAD.md.

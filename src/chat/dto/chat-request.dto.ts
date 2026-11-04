@@ -4,6 +4,8 @@ import {
   IsArray,
   IsIn,
   IsLatitude,
+  IsNumber,
+  Matches,
   IsLongitude,
   IsOptional,
   IsString,
@@ -22,9 +24,11 @@ export class ChatTurnDto {
 }
 
 export class LocationDto {
+  @IsNumber()
   @IsLatitude()
   lat!: number;
 
+  @IsNumber()
   @IsLongitude()
   lng!: number;
 }
@@ -34,6 +38,7 @@ export class ChatRequestDto {
   /** Lo que el usuario acaba de escribir. */
   @IsString()
   @MinLength(1)
+  @Matches(/\S/u)
   @MaxLength(1000)
   message!: string;
 
