@@ -1,13 +1,14 @@
 import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { APP_CONFIG, AppConfig, ProviderName } from '../config/env';
-import { PlaceSummary, PlacesService } from '../places/places.service';
+import { CatalogContext, PlaceSummary, PlacesService } from '../places/places.service';
+import { normalize } from '../places/state-resolver';
 import { ChatRequestDto } from './dto/chat-request.dto';
 import { LLM_PROVIDERS, LlmProvider, LlmRequest } from './providers/llm-provider';
 import { buildSuggestions, buildSystemPrompt } from './prompt';
 
 export interface ChatResponse {
   reply: string;
-  /** Qué agente respondió (útil para depurar; la app no necesita mostrarlo). */
+  /** Proveedor que respondió; en avisos locales, proveedor seleccionado sin invocarlo. */
   provider: ProviderName;
   /** Lugares del catálogo que la respuesta menciona: la app los pinta como tarjetas. */
   places: PlaceSummary[];
@@ -45,9 +46,13 @@ export class ChatService {
       throw new ServiceUnavailableException('El asistente no está configurado.');
     }
 
-    const places = await this.places.getContext(dto.location);
+    const context = await this.places.getContext(dto.location, dto.message, dto.history);
+    const { places } = context;
+    const nearby = context.mode === 'nearby' && context.status === 'found';
+    const notice = ChatService.catalogNotice(context);
+    if (notice) return { reply: notice, provider: providers[0].name, places: [], suggestions: buildSuggestions(false) };
     const request: LlmRequest = {
-      system: buildSystemPrompt({ places, userName: dto.userName, hasLocation: Boolean(dto.location) }),
+      system: buildSystemPrompt({ places, userName: dto.userName, hasLocation: nearby, stateName: context.state?.name }),
       history: (dto.history ?? []).slice(-12),
       message: dto.message.trim(),
     };
@@ -59,16 +64,27 @@ export class ChatService {
       reply: text,
       provider,
       places: ChatService.mentionedPlaces(text, places),
-      suggestions: buildSuggestions(Boolean(dto.location)),
+      suggestions: buildSuggestions(nearby),
     };
+  }
+
+  private static catalogNotice(context: CatalogContext): string | undefined {
+    switch (context.status) {
+      case 'found': return undefined;
+      case 'empty': return `La consulta${context.state ? ` de ${context.state.name}` : ''} no devolvió lugares disponibles en MXGuide. ¿Quieres buscar otro destino?`;
+      case 'ambiguous': return '¿Qué estado quieres consultar? Mencionaste varios destinos o una exclusión; prefiero confirmar antes de recomendarte lugares.';
+      case 'unrecognized': return '¿Puedes escribir el nombre completo del estado tal como aparece en MXGuide? Si te refieres a México, aclara si buscas Ciudad de México, Estado de México o destinos del país.';
+      case 'missing-location': return 'Comparte tu ubicación para buscar lugares cerca de ti, o dime qué estado quieres visitar.';
+      default: return 'No pude consultar el catálogo de MXGuide en este momento. Intenta de nuevo en un rato; no puedo confirmar destinos registrados ahora.';
+    }
   }
 
   private async fallback(providers: LlmProvider[], request: LlmRequest) {
     for (const provider of providers) {
       try {
         return { text: await provider.generate(request), provider: provider.name };
-      } catch (error) {
-        this.logger.warn(`Falló ${provider.name}, probando el siguiente: ${(error as Error).message}`);
+      } catch {
+        this.logger.warn(`Falló ${provider.name}, probando el siguiente.`);
       }
     }
     throw this.unavailable();
@@ -79,9 +95,8 @@ export class ChatService {
       return await Promise.any(
         providers.map(async (provider) => ({ text: await provider.generate(request), provider: provider.name })),
       );
-    } catch (error) {
-      const reasons = error instanceof AggregateError ? error.errors.map((e) => (e as Error).message) : [String(error)];
-      this.logger.warn(`Fallaron todos los proveedores: ${reasons.join(' | ')}`);
+    } catch {
+      this.logger.warn('Fallaron todos los proveedores.');
       throw this.unavailable();
     }
   }
@@ -92,12 +107,12 @@ export class ChatService {
 
   /** Lugares del catálogo cuyo nombre aparece en la respuesta (máximo 5). */
   static mentionedPlaces(reply: string, places: PlaceSummary[]): PlaceSummary[] {
-    const normalize = (s: string) =>
-      s
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .toLowerCase();
-    const text = normalize(reply);
-    return places.filter((p) => p.name.length >= 3 && text.includes(normalize(p.name))).slice(0, 5);
+    const text = ` ${normalize(reply)} `;
+    return places.filter((p) => {
+      const name = normalize(p.name);
+      return name.length >= 3 && places.filter(q => normalize(q.name) === name).length === 1
+        && !places.some(q => q.id !== p.id && normalize(q.name).includes(name))
+        && text.includes(` ${name} `);
+    }).slice(0, 5);
   }
 }
