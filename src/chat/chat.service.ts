@@ -80,6 +80,8 @@ export class ChatService {
       case 'categories-unavailable': return 'El catálogo recibido no permite confirmar las categorías para esta búsqueda. Puedes indicar un estado o explorar lugares variados; no puedo asegurar este filtro de cercanía con los datos disponibles.';
       case 'intent-ambiguous': return '¿Qué tipo de lugares prefieres: atractivos turísticos, hospedaje o gastronomía? Tu solicitud combina tipos o exclusiones que necesito aclarar.';
       case 'followup-ambiguous': return '¿Cuáles lugares de la respuesta anterior quieres comparar? Puedes repetir sus nombres o indicar el estado para hacer una nueva búsqueda.';
+      case 'itinerary-missing-state': return '¿Qué estado te gustaría conocer? Dímelo para preparar un itinerario sencillo con destinos de MXGuide.';
+      case 'itinerary-food-unverified': return 'Puedo mostrarte opciones gastronómicas, pero el catálogo no distingue restaurantes de platillos. Para armar paradas visitables necesito esa información confirmada. ¿Prefieres un itinerario de atractivos turísticos?';
       case 'found': return undefined;
       case 'empty': return `La consulta${context.state ? ` de ${context.state.name}` : ''} no devolvió coincidencias confirmadas para el tipo solicitado entre los registros recibidos de MXGuide. ¿Quieres buscar otro destino?`;
       case 'ambiguous': return '¿Qué estado quieres consultar? Mencionaste varios destinos o una exclusión; prefiero confirmar antes de recomendarte lugares.';

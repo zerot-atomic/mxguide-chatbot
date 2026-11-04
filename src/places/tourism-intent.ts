@@ -3,7 +3,7 @@ export type Intent = 'general' | 'ambiguous' | 'attractions' | 'historic' | 'arc
 const rules: [Intent, RegExp][] = [
   ['historic', /\b(historicos?|historicas?|historia|monumentos?)\b/],
   ['archaeology', /\b(arqueologicos?|arqueologicas?|arqueologia|ruinas)\b/],
-  ['culture', /\b(museos?|culturales?|cultura)\b/],
+  ['culture', /\b(museos?|cultural(?:es)?|cultura)\b/],
   ['nature', /\b(naturales?|naturaleza|cascadas?|bosques?)\b/],
   ['religion', /\b(religiosos?|religiosas?|iglesias?|templos?)\b/],
   ['lodging', /\b(hospedaje|hoteles?|alojamiento|dormir)\b/],

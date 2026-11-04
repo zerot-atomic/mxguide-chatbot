@@ -1,3 +1,4 @@
+import { directItinerary, itineraryContext } from './itinerary';
 import { previousRecommendationIds } from './followup-context';
 import { readBoundedJson, hasExternalReference } from '../common/external-data';
 import { Intent, classifyIntent, categoryNames, matchesIntent } from './tourism-intent';
@@ -16,13 +17,14 @@ export interface Coordinates {
     lat: number;
     lng: number;
 }
-export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous' | 'followup-ambiguous';
+export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous' | 'followup-ambiguous' | 'itinerary-missing-state' | 'itinerary-food-unverified';
 export interface CatalogContext {
     status: CatalogStatus;
     mode: 'state' | 'nearby' | 'featured';
     places: PlaceSummary[];
     state?: CatalogState;
     intent?: Intent;
+    itinerary?: boolean;
 }
 const TTL = 600000;
 const obj = (r: unknown): Record<string, unknown> | undefined => r !== null && typeof r === 'object' && !Array.isArray(r) ? r as Record<string, unknown> : undefined;
@@ -50,16 +52,21 @@ export class PlacesService {
     }[] = []): Promise<CatalogContext> {
         let mode: CatalogContext['mode'] = 'featured';
         let state: CatalogState | undefined;
-        const intent = classifyIntent(message);
+        let intent = classifyIntent(message);
+        const itinerary = itineraryContext(message, history);
         try {
             if (!this.config.mxguideApiUrl)
                 throw new CatalogError('unconfigured');
             const states = await this.getStates();
             let resolution = resolveState(message, states);
+            const explicitState = resolution.kind === 'state';
             const nearby = /\b(cerca de mi|cercanos|cercanas|mas lugares cerca)\b/.test(normalize(message));
-            if (resolution.kind === 'general' && !nearby) resolution = resolveHistoryState(message, history, states);
+            if (resolution.kind === 'general' && !nearby) resolution = resolveHistoryState(itinerary.itinerary ? 'arma mi itinerario' : message, history, states);
             if (resolution.kind === 'ambiguous' || resolution.kind === 'unrecognized')
                 return { status: resolution.kind, mode, places: [] };
+            if (itinerary.itinerary && intent === 'general') intent = (!explicitState || !directItinerary(message) ? itinerary.inheritedIntent : undefined) ?? 'attractions';
+            if (itinerary.itinerary && resolution.kind !== 'state') return {status:'itinerary-missing-state', mode, intent, places:[]};
+            if (itinerary.itinerary && ['gastronomy','restaurants','dishes'].includes(intent)) return {status:'itinerary-food-unverified', mode, intent, places:[]};
             if (resolution.kind === 'state') {
                 mode = 'state';
                 state = resolution.state;
@@ -94,7 +101,7 @@ export class PlacesService {
                     const allowedIds = new Set(candidates.map(p => p.id));
                     raw = raw.filter(p => allowedIds.has(obj(p)?.id as string));
                 }
-                candidates = raw.filter(p => (!state || obj(p)?.stateId === state.id) && matchesIntent(p, intent)).map(p => PlacesService.toSummary(p, states)).filter((p): p is PlaceSummary => p !== null);
+                candidates = raw.filter(p => (!state || obj(p)?.stateId === state.id) && matchesIntent(p, intent) && (!itinerary.itinerary || intent === 'lodging' || !categoryNames(p).some(name => ['hospedaje','gastronomia'].includes(normalize(name))))).map(p => PlacesService.toSummary(p, states)).filter((p): p is PlaceSummary => p !== null);
                 if (mode === 'nearby') {
                     const hadMatches = candidates.length > 0;
                     candidates = candidates.filter(p => p.distanceKm !== undefined).sort((a, b) => a.distanceKm! - b.distanceKm! || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -107,7 +114,7 @@ export class PlacesService {
                     if (!unique.has(p.id))
                         unique.set(p.id, p);
                 const places = [...unique.values()].slice(0, mode === 'nearby' ? 10 : mode === 'state' ? 15 : 20);
-                return { status: places.length ? 'found' : 'empty', mode, state, intent, places };
+                return { status: places.length ? 'found' : 'empty', mode, state, intent, itinerary: itinerary.itinerary, places };
             }
 
         }

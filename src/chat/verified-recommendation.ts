@@ -26,17 +26,17 @@ export function verifiedRecommendation(text: unknown, context: CatalogContext): 
   if (!places.length) return { reply: 'No tengo una selección verificable para recomendarte. Puedes precisar qué deseas consultar; esto no significa que no existan registros en MXGuide.', places: [] };
   const scope = context.state ? ' en ' + displayText(context.state.name) : context.mode === 'nearby' ? ' cerca de ti' : '';
   const intro = introductions[context.intent ?? 'general'] ?? introductions.general;
-  const lines = places.map(p => {
+  const lines = places.map((p, index) => {
     const description = briefDescription(p.description);
-    const distance = context.mode === 'nearby' && typeof p.distanceKm === 'number' && Number.isFinite(p.distanceKm) && p.distanceKm >= 0 ? ' · a ' + p.distanceKm + ' km' : '';
+    const distance = !context.itinerary && context.mode === 'nearby' && typeof p.distanceKm === 'number' && Number.isFinite(p.distanceKm) && p.distanceKm >= 0 ? ' · a ' + p.distanceKm.toFixed(2) + ' km' : '';
     const type = !context.intent || context.intent === 'general' ? generalType(p.category) : '';
-    return '- ' + displayText(p.name) + (type ? ' (' + type + ')' : '') + distance + (description ? ': ' + displayText(description) : '');
+    return (context.itinerary ? (index + 1) + '. ' : '- ') + displayText(p.name) + (type ? ' (' + type + ')' : '') + distance + (description ? ': ' + displayText(description) : '');
   });
   const food = places.some(p => normalize(p.category).split(' ').includes('gastronomia'));
   return {
-    reply: (selection === null ? 'Te comparto una selección de MXGuide. ' : '') + intro + scope + ':\n' + lines.join('\n')
+    reply: (selection === null ? 'Te comparto una selección de MXGuide. ' : '') + (context.itinerary ? 'Itinerario sugerido para conocer' + (context.state ? ' ' + displayText(context.state.name) : ' estos destinos') : intro + scope) + ':\n' + lines.join('\n')
       + (food ? '\nPara explorar la gastronomía local, ten en cuenta que esta selección puede incluir platillos y establecimientos; no confirma que todos sean lugares visitables ni restaurantes.' : '')
-      + '\nSon algunas opciones para empezar. Confirma horarios, precios y servicios antes de planear una visita.',
+      + (context.itinerary ? '\nEste itinerario es orientativo. Confirma horarios y disponibilidad antes de tu visita; el orden no representa una ruta optimizada. La duración solicitada es solo una preferencia: no garantiza que puedas visitar todas las paradas en ese tiempo.' : '\nSon algunas opciones para empezar. Confirma horarios, precios y servicios antes de planear una visita.'),
     places,
   };
 }
