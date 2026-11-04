@@ -39,7 +39,7 @@ it('filtra antes del Top 10 con categorías enriquecidas simuladas; no implica s
  const service = backend(raw);
  const result = await service.getContext({lat: 0, lng: 0}, 'atracciones turísticas cerca');
  expect(result.places.map(p => p.id)).toEqual(Array.from({length: 10}, (_, i) => id(130+i)));
- const generate = jest.fn(async () => 'Registro 30');
+ const generate = jest.fn(async () => JSON.stringify({placeIds:[id(130)]}));
  const chat = await new ChatService(config, [{name:'gemini',isConfigured:()=>true,generate}], service).chat({message:'atracciones turísticas cerca',location:{lat:0,lng:0}});
  expect(generate.mock.calls).toHaveLength(1);
  expect(chat.places[0].id).toBe(id(130));
@@ -91,7 +91,7 @@ it('regresión Puebla: comida típica fuera de los primeros 15 se recupera entre
  expect(context.places.every(p => p.category === 'Gastronomía' && p.state === 'Puebla')).toBe(true);
  expect(fetchMock.mock.calls[1][0]).toBe(`https://catalog.invalid/places?stateId=${puebla.id}&limit=100`);
  const requests: import('../src/chat/providers/llm-provider').LlmRequest[] = [];
- const chat = new ChatService(config, [{ name: 'gemini', isConfigured: () => true, generate: async r => { requests.push(r); return 'Registro 15'; } }], service);
+ const chat = new ChatService(config, [{ name: 'gemini', isConfigured: () => true, generate: async r => { requests.push(r); return JSON.stringify({placeIds:[id(115)]}); } }], service);
  const response = await chat.chat({message});
  const lines = requests[0].system.split('\n').filter(line => line.startsWith('- Registro '));
  expect(lines).toHaveLength(15);

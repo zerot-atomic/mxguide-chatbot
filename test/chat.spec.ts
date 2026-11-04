@@ -97,7 +97,7 @@ describe('ChatService (orquestador)', () => {
     const fast = fakeProvider('groq', async () => 'rápido');
     const service = new ChatService(config, [slow, fast], noPlaces);
 
-    expect((await service.chat(dto)).reply).toBe('rápido');
+    expect((await service.chat(dto)).provider).toBe('groq');
   });
 
   it('responde 503 si fallan todos', async () => {
@@ -177,7 +177,7 @@ describe('API HTTP', () => {
   it('POST /chat responde', async () => {
     app = await createApp({});
     const res = await request(app.getHttpServer()).post('/chat').send({ message: 'Hola' }).expect(200);
-    expect(res.body).toMatchObject({ reply: '¡Hola! Soy Mitlan.', provider: 'gemini', places: [] });
+    expect(res.body).toMatchObject({ provider: 'gemini', places: [] });
     expect(res.body.suggestions.length).toBeGreaterThan(0);
   });
 

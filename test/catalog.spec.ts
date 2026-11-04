@@ -53,7 +53,7 @@ describe('catálogo HTTP simulado', () => {
         expect(context.places).toHaveLength(10);
         expect(context.places[1].distanceKm).toBe(0.0001);
         const requests: LlmRequest[] = [];
-        const chat = new ChatService(config, [{ name: 'gemini', isConfigured: () => true, generate: async (r) => { requests.push(r); return 'Destino 14'; } }], service);
+        const chat = new ChatService(config, [{ name: 'gemini', isConfigured: () => true, generate: async (r) => { requests.push(r); return JSON.stringify({placeIds:[id(114)]}); } }], service);
         const response = await chat.chat({ message: 'cerca de mí', location: { lat: 19, lng: -99 } });
         expect(requests[0].system.split('\n').filter(line => line.startsWith('- Destino '))).toHaveLength(10);
         expect(response.places.map(p => p.id)).toEqual([id(114)]);

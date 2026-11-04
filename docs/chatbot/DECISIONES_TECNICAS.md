@@ -31,3 +31,6 @@ Ver FASE2_CATEGORIAS.md para los siete nombres oficiales, reglas y limitaciones.
 
 ## Actualización: recuperación frente a selección
 Las consultas estatales específicas recuperan una muestra de hasta 100; generales solicitan 15. Todas siguen seleccionando como máximo 15 candidatos para IA. Esta decisión sustituye el límite remoto uniforme de fase 1 y la primera implementación de fase 2. No introduce paginación ni exhaustividad; cero coincidencias solo se refiere a la muestra. Nearby y su orden de selección siguen iguales.
+
+## Fase 3: identidad y texto público
+La salida del modelo selecciona IDs y nunca proporciona datos de tarjetas o texto público. El servidor valida membresía exacta y genera reply desde los mismos objetos de places. Esta decisión sustituye la asociación por nombres en el flujo y la publicación directa de prosa. Ante selección inválida se usa fallback local sin nuevos consumos de IA. JSON es una convención de texto con validación local, no una función nativa supuesta de los proveedores. Detalles y limitaciones de redacción en FASE3_VERACIDAD.md.

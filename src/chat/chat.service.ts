@@ -1,3 +1,4 @@
+import { verifiedRecommendation } from './verified-recommendation';
 import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { APP_CONFIG, AppConfig, ProviderName } from '../config/env';
 import { CatalogContext, PlaceSummary, PlacesService } from '../places/places.service';
@@ -60,10 +61,10 @@ export class ChatService {
     const { text, provider } =
       this.config.strategy === 'race' ? await this.race(providers, request) : await this.fallback(providers, request);
 
+    const verified = verifiedRecommendation(text, context);
     return {
-      reply: text,
+      ...verified,
       provider,
-      places: ChatService.mentionedPlaces(text, places),
       suggestions: buildSuggestions(nearby),
     };
   }
