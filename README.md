@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # MXGuide Chatbot · MICHTLAN
+=======
+# MXGuide Chatbot · Mictlan
+>>>>>>> 637f15b (rename: Balam -> Mictlan across chatbot)
 
 API del asistente de viaje de **MXGuide**. La app manda el mensaje del usuario y este servicio
 lo resuelve con agentes de IA (**Google Gemini** y **xAI Grok**), usando los lugares reales del
@@ -36,7 +40,7 @@ Con una sola llave configurada, funciona solo con ese proveedor.
   "message": "¿Qué puedo visitar en Puebla este fin de semana?",
   "history": [
     { "role": "user", "content": "Hola" },
-    { "role": "assistant", "content": "¡Hola! Soy Balam, ¿a dónde vamos?" }
+    { "role": "assistant", "content": "¡Hola! Soy Mictlan, ¿a dónde vamos?" }
   ],
   "location": { "lat": 19.0414, "lng": -98.2063 },
   "userName": "Jesús"
@@ -148,7 +152,7 @@ final response = await http.post(
 
 ## Ajustar la personalidad
 
-Las reglas de Balam (tono, longitud, qué no inventar) están en `src/chat/prompt.ts`.
+Las reglas de Mictlan (tono, longitud, qué no inventar) están en `src/chat/prompt.ts`.
 
 ## Estructura
 
@@ -163,9 +167,10 @@ src/
 └── chat/
     ├── chat.controller.ts     # POST /chat
     ├── chat.service.ts        # orquestador fallback / race
-    ├── prompt.ts              # personalidad y reglas de Balam
+    ├── prompt.ts              # personalidad y reglas de Mictlan
     ├── dto/                   # validación del cuerpo
     └── providers/             # Gemini y Grok
 test/chat.spec.ts              # pruebas con agentes simulados
 ```
 "# mxguide-chatbot" 
+

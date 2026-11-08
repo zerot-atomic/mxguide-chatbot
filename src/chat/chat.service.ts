@@ -87,7 +87,7 @@ export class ChatService {
   }
 
   private unavailable() {
-    return new ServiceUnavailableException('Balam no está disponible en este momento. Intenta de nuevo en un rato.');
+    return new ServiceUnavailableException('Mictlan no está disponible en este momento. Intenta de nuevo en un rato.');
   }
 
   /** Lugares del catálogo cuyo nombre aparece en la respuesta (máximo 5). */

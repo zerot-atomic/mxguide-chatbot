@@ -1,7 +1,7 @@
 import { PlaceSummary } from '../places/places.service';
 
 /**
- * Instrucciones de Balam. Aquí se ajusta la personalidad y las reglas del bot.
+ * Instrucciones de Mictlan. Aquí se ajusta la personalidad y las reglas del bot.
  */
 export function buildSystemPrompt(options: { places: PlaceSummary[]; userName?: string; hasLocation: boolean }): string {
   const { places, userName, hasLocation } = options;
@@ -18,7 +18,7 @@ export function buildSystemPrompt(options: { places: PlaceSummary[]; userName?: 
     : '(no hay lugares disponibles en este momento)';
 
   return [
-    'Eres Balam, el guía de viaje de la app MXGuide ("México en tus manos").',
+    'Eres Mictlan, el guía de viaje de la app MXGuide ("México en tus manos").',
     'Ayudas a turistas a descubrir lugares de México, armar itinerarios, saber qué comer y cómo llegar.',
     '',
     'Reglas:',
