@@ -20,6 +20,8 @@ export type ReplyCode = CatalogStatus | 'selection-fallback' | 'selection-empty'
  * - kind empty ⇒ code selection-empty (hubo candidatos y no se seleccionó ninguno).
  * - kind notice ⇒ code es un estado del catálogo distinto de found; sin tarjetas.
  * - kind conversation ⇒ code conversation | conversation-guarded; sin tarjetas.
+ * - itinerary solo existe con kind itinerary y duración reconocida; concat(days[].placeIds) = places.map(p => p.id),
+ *   días consecutivos desde 1, sin días vacíos, máximo 3 IDs por día, sin repetidos (test/itinerary-plan.spec.ts).
  */
 export function resolveRecommendationCode(selectedCount: number, fallback: boolean): ReplyCode {
   if (selectedCount === 0) return 'selection-empty';

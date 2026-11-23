@@ -88,7 +88,7 @@ La ubicación se usa en NestJS para consultar nearby, no se envía como campo al
 |---|---|
 | reply | String Markdown limitado generado por NestJS (ver CONTRATO_RESPUESTAS.md) |
 | provider | String `gemini` o `groq`; ver semántica limitada más abajo |
-| places | Array de cero a cinco tarjetas seleccionadas; fallback seguro puede mostrar hasta tres |
+| places | Array de cero a cinco tarjetas seleccionadas (hasta **21** en itinerarios con duración); fallback seguro puede mostrar hasta tres, o el objetivo del itinerario |
 | suggestions | Array de strings; son consultas sugeridas, no acciones ejecutables |
 | places[].id | String UUID original del catálogo; no modificar su valor o mayúsculas |
 | places[].name | String, hasta 120 caracteres tras adaptación |
@@ -146,7 +146,7 @@ Un array vacío no implica fallo: puede ser aclaración, ubicación faltante, ce
 
 ## Errores HTTP reales
 
-Los errores no tienen el contrato de chat: contienen `statusCode` numérico y `message` string, sin stack ni detalles remotos.
+Los errores no tienen el contrato de chat: contienen `statusCode` numérico, `message` string y `error: { code, message, retryable }` (ver [CONTRATO_RESPUESTAS.md](CONTRATO_RESPUESTAS.md)), sin stack ni detalles remotos. Decidir con `error.code` / `retryable`, no con `message`.
 
 | HTTP | message actual | Acción UI |
 |---|---|---|
@@ -156,10 +156,10 @@ Los errores no tienen el contrato de chat: contienen `statusCode` numérico y `m
 | 429 | Demasiadas solicitudes. Intenta de nuevo en un momento. | Frenar envíos y ofrecer reintento manual después; respetar Retry-After si existe |
 | 503 | El asistente no está disponible en este momento. | Avisar indisponibilidad y permitir reintento manual |
 | 500 | No se pudo procesar la solicitud. | Aviso genérico; sin publicar cuerpos arbitrarios |
-| 404 | No se pudo procesar la solicitud. | Revisar URL/ruta/método; no usar /api/chat |
+| 404 | Recurso no encontrado. | Revisar URL/ruta/método; no usar /api/chat |
 
 ```json
-{"statusCode":400,"message":"Solicitud inválida."}
+{"statusCode":400,"message":"Solicitud inválida.","error":{"code":"invalid_request","message":"Solicitud inválida.","retryable":false}}
 ```
 
 No todos los fallos de catálogo son 503: el servicio normalmente responde 200 con aviso local y places vacío. 503 se usa por ausencia/fallo de proveedores. Un proxy puede devolver HTML u otro error: no asumir JSON siempre ni mostrar HTML/stack al usuario. `/health` es público y solo reporta proceso, configuración de estrategia y presencia de claves; no verifica cuota, credenciales válidas ni catálogo accesible.
@@ -321,12 +321,16 @@ Enviar {"message":"Organízame un itinerario de un día para conocer Puebla"} o 
 
 Para «¿Qué lugares históricos hay en Oaxaca?» → «Arma mi itinerario», reenviar ambos turnos de la primera respuesta (user y reply original assistant) junto al nuevo message. Se conservan Oaxaca y la categoría. También funcionan «Itinerario en Puebla» → «¿Y uno cultural?» y «Itinerario en Veracruz» → «¿Y en Chiapas?». No enviar el JSON de selección interno; history sigue usándose solo localmente.
 
-reply contiene una lista numerada y una advertencia orientativa. Cada número coincide con el objeto de places en esa posición. Mostrar texto y tarjetas; no dibujar una ruta ni generar un mapa o agenda a partir del orden. Conservar el reply original numerado para «de esos»; no se introducen campos públicos nuevos. Se mantienen máximos de cinco tarjetas, fallback seguro y avisos 200 locales.
+reply contiene una lista numerada y una advertencia orientativa. Cada número coincide con el objeto de places en esa posición. Mostrar texto y tarjetas; no dibujar una ruta ni generar un mapa o agenda a partir del orden. Conservar el reply original numerado para «de esos». Sin duración se mantienen máximos de cinco tarjetas, fallback seguro y avisos 200 locales.
+
+**Itinerarios con duración (etapas 3 y 4).** Con 1–7 días, `reply` agrupa por `**Día N**` con numeración global (el destino N es `places[N-1]`) y la respuesta incluye el campo opcional `itinerary` (`requestedDays`, `days[].placeIds`), cuya concatenación coincide exactamente con `places`. **Una respuesta de itinerario puede traer hasta 21 tarjetas**: el equipo de Flutter debe revisar que la interfaz lo soporte (desplazamiento, rendimiento). El campo puede ignorarse: `reply` y `places` siguen siendo suficientes. Si se usa, agrupar tarjetas por día con `days[].placeIds` y nunca deducir tarjetas del texto. Detalles en [CONTRATO_RESPUESTAS.md](CONTRATO_RESPUESTAS.md). Más de 7 días no produce itinerario: llega `kind: notice` con `code: itinerary-days-out-of-range` y la app solo debe mostrar el texto y seguir reenviando el historial; la respuesta del usuario con una duración válida («Perdón, mejor 5 días») continúa el itinerario.
 
 La duración de un día es solo preferencia, no promesa de que todas las visitas quepan. No hay horas asignadas, costos, traslados, reservas o distancias entre paradas. Gastronomía puede requerir aclaración porque no se distinguen restaurantes de platillos; los itinerarios generales excluyen hoteles y comida. Detalles y ejemplo simulado en [ITINERARIOS_SENCILLOS.md](ITINERARIOS_SENCILLOS.md). Este apartado actualiza el soporte de la sugerencia respecto de la primera entrega de fase 5; no certifica integración Flutter real.
 
 
 ## Primera versión: duración y presentación del itinerario
+
+> **Histórico.** Esta sección describe la primera versión. Hoy, con una duración de 1 a 7 días, `reply` se agrupa por `**Día N**` y la respuesta incluye `itinerary`; con más de 7 días se responde el aviso `itinerary-days-out-of-range`. Ver «Itinerarios con duración (etapas 3 y 4)» arriba y [ITINERARIOS_SENCILLOS.md](ITINERARIOS_SENCILLOS.md).
 El usuario confirmó pruebas satisfactorias con Groq y el catálogo real de MXGuide. La validación se registra como reportada por el usuario, sin nuevas llamadas desde Codex; no equivale a una validación de la UI Flutter.
 
 «Organízame un itinerario de un día en Yucatán» solicita una lista ordenada orientativa. «Organízame un itinerario de tres días en Yucatán» también devuelve una lista general, sin dividirla en Día 1, Día 2 o Día 3. Flutter debe mostrar reply tal como llega y las tarjetas de places, sin inventar agrupaciones por días, horarios o rutas. No hay nuevos campos de duración o jornadas en el contrato.

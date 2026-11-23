@@ -217,8 +217,9 @@ describe('contexto en seguimientos a través de ambos modos', () => {
     const oaxaca = await say('¿Qué lugares hay en Oaxaca?');
     expect(oaxaca.places.map(p => p.state)).toEqual(['Oaxaca', 'Oaxaca']);
     const more = await say('¿Y cuáles más hay allí?');
-    expect(more.kind).toBe('recommendation');
-    expect(more.places.every(p => p.state === 'Oaxaca')).toBe(true);
+    // Los dos destinos de Oaxaca ya se mostraron: aviso en el mismo estado, sin repetir ni mezclar estados.
+    expect(more).toMatchObject({ kind: 'notice', code: 'exhausted', places: [] });
+    expect(more.reply).toContain('de Oaxaca');
     const chiapas = await say('¿Y en Chiapas?');
     expect(chiapas.places.map(p => p.name)).toEqual(['Palenque']);
     expect((await say('Gracias, eres muy amable')).kind).toBe('conversation');

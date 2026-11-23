@@ -15,6 +15,11 @@ export interface ChatDiagnostic {
   mode?: string;
   stateId?: string;
   requestedType?: string;
+  /** Modo itinerario y días pedidos (1–7), si aplica. */
+  itinerary?: boolean;
+  itineraryDays?: number;
+  /** Días con destinos en el plan (≤ itineraryDays); ausente si no hubo distribución. */
+  plannedDays?: number;
   /** Candidatos del catálogo enviados al selector y tarjetas finales. */
   candidates: number;
   selected: number;
@@ -33,7 +38,7 @@ export interface ChatDiagnostic {
 export const newRequestId = (): string => randomUUID();
 
 /** Campos permitidos, en orden estable: cualquier otra propiedad se descarta antes de registrar. */
-const ALLOWED: (keyof ChatDiagnostic)[] = ['requestId', 'route', 'catalogStatus', 'intent', 'mode', 'stateId', 'requestedType', 'candidates', 'selected', 'provider', 'kind', 'code', 'outcome', 'error', 'historyTurns', 'hasLocation', 'durationMs'];
+const ALLOWED: (keyof ChatDiagnostic)[] = ['requestId', 'route', 'catalogStatus', 'intent', 'mode', 'stateId', 'requestedType', 'itinerary', 'itineraryDays', 'plannedDays', 'candidates', 'selected', 'provider', 'kind', 'code', 'outcome', 'error', 'historyTurns', 'hasLocation', 'durationMs'];
 
 export function serializeDiagnostic(diagnostic: ChatDiagnostic): string {
   const record: Record<string, unknown> = {};

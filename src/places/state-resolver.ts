@@ -21,15 +21,21 @@ export function resolveState(message: string, states: CatalogState[]): Resolutio
 }
 
 /** Follow only a contiguous chain of recognized continuations, bounded to 12 turns. */
-export function resolveHistoryState(message: string, history: {role:string;content:string}[], states: CatalogState[]): Resolution {
-    const continues = (text: string) => /^(y |y$|cuales|que otros|mas lugares|arma mi itinerario|como llegar)/.test(normalize(text))
+export function resolveHistoryState(message: string, history: {role:string;content:string}[], states: CatalogState[], assumeContinuation = false, isContinuation: (text: string) => boolean = () => false, clean: (text: string) => string = text => text): Resolution {
+    const continues = (text: string) => /^(y |y$|cuales|que otros|que otras|que mas|algo mas|mas lugares|arma mi itinerario|como llegar|mejor|agrega|anade|incluye)/.test(normalize(text))
         || /\b(alli|ahi|en ese estado|en el mismo estado|de esos|de esas|de los anteriores|de las anteriores)\b/.test(normalize(text));
-    if (!continues(message)) return {kind:'general'};
+    // El llamador puede afirmar que el mensaje es continuación (itinerario o «¿qué más?») aunque no use estas fórmulas.
+    if (!assumeContinuation && !continues(message)) return {kind:'general'};
     const users = history.slice(-12).filter(t => t.role === 'user').reverse();
     for (const turn of users) {
-        const resolution = resolveState(turn.content, states);
+        const resolution = resolveState(clean(turn.content), states);
         if (resolution.kind !== 'general') return resolution;
-        if (!continues(turn.content)) break;
+        if (!continues(turn.content) && !directItineraryLike(turn.content) && !isContinuation(turn.content)) break;
     }
     return {kind:'general'};
+}
+
+/** Un turno que pidió itinerario también forma parte de la cadena (sin importar itinerary.ts: evita ciclos). */
+function directItineraryLike(text: string): boolean {
+    return /\b(itinerarios?|recorridos?|planea\w*|organiza\w*|ruta (por|en|de)|recorrer)\b/.test(normalize(text));
 }

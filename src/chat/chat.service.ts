@@ -1,6 +1,6 @@
 import { personalizeReply } from './personalization';
 import { redactSelectionText, stripPersonalGreeting } from '../common/external-data';
-import { verifiedRecommendation } from './verified-recommendation';
+import { ItineraryField, selectionLimit, verifiedRecommendation } from './verified-recommendation';
 import { REPLY_FORMAT, ReplyCode, ReplyKind, resolveRecommendationCode } from './response-contract';
 import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { APP_CONFIG, AppConfig, ProviderName, logEnabled } from '../config/env';
@@ -26,6 +26,11 @@ export interface ChatResponse {
   /** Lugares del catálogo que la respuesta menciona: la app los pinta como tarjetas. */
   places: PlaceSummary[];
   suggestions: string[];
+  /**
+   * Solo en kind "itinerary" con duración reconocida (1–7 días). La concatenación de days[].placeIds es
+   * exactamente places.map(p => p.id), en el mismo orden. En cualquier otra respuesta la llave no existe.
+   */
+  itinerary?: ItineraryField;
 }
 
 /**
@@ -65,6 +70,7 @@ export class ChatService {
       diag.kind = response.kind;
       diag.code = response.code;
       diag.selected = response.places.length;
+      if (response.itinerary) diag.plannedDays = response.itinerary.days.length;
       return response;
     } catch (error) {
       diag.outcome = 'error';
@@ -87,6 +93,7 @@ export class ChatService {
     Object.assign(diag, {
       catalogStatus: context.status, intent: context.intent, mode: context.status === 'conversation' ? undefined : context.mode,
       stateId: context.state?.id, requestedType: context.requestedType?.key, candidates: places.length,
+      itinerary: context.itinerary || undefined, itineraryDays: context.itineraryDays,
     });
     const nearby = context.mode === 'nearby' && context.status === 'found';
     const personalize = (reply: string) => personalizeReply(reply, dto.userName ? redactSelectionText(dto.userName, [this.config.gemini.apiKey, this.config.groq.apiKey, this.config.chatApiKey]) : undefined);
@@ -103,7 +110,7 @@ export class ChatService {
     const request: LlmRequest = {
       system: buildSystemPrompt({ places, hasLocation: nearby, intent: context.intent }),
       history: [],
-      message: JSON.stringify({ query: safe(dto.message.trim()), intent: context.intent ?? 'general', candidates: places.map(p => ({id:p.id,name:safe(p.name),category:safe(p.category),state:safe(p.state)})) }),
+      message: JSON.stringify({ query: safe(dto.message.trim()), intent: context.intent ?? 'general', maxPlaceIds: selectionLimit(context), candidates: places.map(p => ({id:p.id,name:safe(p.name),category:safe(p.category),state:safe(p.state)})) }),
     };
 
     diag.route = 'catalog';
@@ -120,6 +127,7 @@ export class ChatService {
       places: verified.places,
       provider,
       suggestions: buildSuggestions(nearby),
+      ...(verified.itinerary ? { itinerary: verified.itinerary } : {}),
     };
   }
 
@@ -153,8 +161,10 @@ export class ChatService {
       case 'intent-ambiguous': return '¿Qué tipo de lugares prefieres: atractivos turísticos, hospedaje o gastronomía? Tu solicitud combina tipos o exclusiones que necesito aclarar.';
       case 'followup-ambiguous': return '¿Cuáles lugares de la respuesta anterior quieres comparar? Puedes repetir sus nombres o indicar el estado para hacer una nueva búsqueda.';
       case 'itinerary-missing-state': return '¿Qué estado te gustaría conocer? Dímelo para preparar un itinerario sencillo con destinos de MXGuide.';
+      case 'itinerary-days-out-of-range': return `Puedo preparar itinerarios de 1 a 7 días. ¿Cuántos días quieres para conocer ${context.state ? context.state.name : 'tu destino'}? Responde con un número del 1 al 7.`;
       case 'itinerary-food-unverified': return 'Puedo mostrarte opciones gastronómicas, pero el catálogo no distingue restaurantes de platillos. Para armar paradas visitables necesito esa información confirmada. ¿Prefieres un itinerario de atractivos turísticos?';
       case 'found': return undefined;
+      case 'exhausted': return `Ya te mostré los destinos${context.state ? ` de ${context.state.name}` : ''} que encontré en MXGuide para esta búsqueda. ¿Quieres buscar otro tipo de lugar u otro estado?`;
       case 'type-unverified': {
         const label = context.requestedType?.label ?? 'ese tipo de lugar';
         const where = context.state ? ` en ${context.state.name}` : context.mode === 'nearby' ? ' cerca de ti' : '';

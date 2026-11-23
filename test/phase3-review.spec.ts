@@ -168,8 +168,10 @@ describe('3. Herencia de contexto en seguimientos', () => {
   it.each(['¿Y cuáles más hay allí?', '¿Qué otros hay?', '¿Y qué más?', 'cuáles más', '¿Algo más por ahí?'])(
     'continuación corta conserva el estado: %s', async message => {
       const result = await service().chat({ message, history });
-      expect(result.kind).toBe('recommendation');
-      expect(result.places.map(p => p.id)).toEqual([id(102)]);
+      // Oaxaca solo tiene Monte Albán y ya se mostró: se avisa en el mismo estado, sin repetir ni mezclar.
+      expect(result).toMatchObject({ kind: 'notice', code: 'exhausted', places: [] });
+      expect(result.reply).toContain('de Oaxaca');
+      expect(fetched.filter(p => p.startsWith('/places'))).toEqual(['/places']);
     });
 
   it('un seguimiento con señal turística también conserva el estado', async () => {

@@ -1,4 +1,4 @@
-import { directItinerary, itineraryContext } from './itinerary';
+import { directItinerary, foodItinerary, isItineraryContinuation, itineraryContext, moreRequest, withoutLeadIns } from './itinerary';
 import { previousRecommendationIds } from './followup-context';
 import { readBoundedJson, hasExternalReference } from '../common/external-data';
 import { Intent, classifyIntent, categoryNames, matchesIntent } from './tourism-intent';
@@ -7,6 +7,7 @@ import { APP_CONFIG, AppConfig, logEnabled } from '../config/env';
 import { CatalogState, normalize, resolveState, resolveHistoryState } from './state-resolver';
 import { isShortContinuation, mentionsKnownState } from './state-hints';
 import { RequestedPlaceType, detectRequestedType, hasTypeEvidence } from './place-types';
+import { ITINERARY_CANDIDATE_LIMIT } from './itinerary-plan';
 export interface PlaceSummary {
     id: string;
     name: string;
@@ -19,7 +20,7 @@ export interface Coordinates {
     lat: number;
     lng: number;
 }
-export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous' | 'followup-ambiguous' | 'itinerary-missing-state' | 'itinerary-food-unverified' | 'conversation' | 'type-unverified';
+export type CatalogStatus = 'found' | 'empty' | 'ambiguous' | 'unrecognized' | 'missing-location' | 'http' | 'timeout' | 'connection' | 'malformed' | 'unconfigured' | 'categories-unavailable' | 'intent-ambiguous' | 'followup-ambiguous' | 'itinerary-missing-state' | 'itinerary-food-unverified' | 'conversation' | 'type-unverified' | 'exhausted' | 'itinerary-days-out-of-range';
 export interface CatalogContext {
     status: CatalogStatus;
     mode: 'state' | 'nearby' | 'featured';
@@ -27,6 +28,10 @@ export interface CatalogContext {
     state?: CatalogState;
     intent?: Intent;
     itinerary?: boolean;
+    /** Días pedidos para el itinerario (1–7), si el usuario los indicó. */
+    itineraryDays?: number;
+    /** Se pidió una duración fuera de rango (no se reemplaza por otra). */
+    itineraryDaysOutOfRange?: boolean;
     /** Tipo de lugar pedido que no es categoría del catálogo (playas, cenotes…). */
     requestedType?: RequestedPlaceType;
 }
@@ -66,12 +71,15 @@ export class PlacesService {
     }[] = []): Promise<CatalogContext> {
         let mode: CatalogContext['mode'] = 'featured';
         let state: CatalogState | undefined;
-        let intent = classifyIntent(message);
+        // Las muletillas iniciales («No, mejor…») no deben leerse como exclusiones de estado o de categoría.
+        const content = withoutLeadIns(message);
+        let intent = classifyIntent(content);
         const itinerary = itineraryContext(message, history);
         const detectedType = detectRequestedType(message);
         const requestedType = detectedType === 'multiple' ? undefined : detectedType;
         const signal = hasTourismSignal(message, intent, itinerary.itinerary) || detectedType !== undefined;
-        const continuation = isShortContinuation(message);
+        const more = moreRequest(message);
+        const continuation = isShortContinuation(message) || more;
         // Sin señal, sin posible estado y sin continuación: es conversación y no se consulta /states.
         if (!signal && !continuation && !mentionsKnownState(message)) return { status: 'conversation', mode, places: [] };
         try {
@@ -84,17 +92,20 @@ export class PlacesService {
                 if (!signal) return { status: 'conversation', mode, places: [] };
                 throw error;
             }
-            let resolution = resolveState(message, states);
+            let resolution = resolveState(content, states);
             const explicitState = resolution.kind === 'state';
             const nearby = /\b(cerca de mi|cercanos|cercanas|mas lugares cerca)\b/.test(normalize(message));
-            if (resolution.kind === 'general' && !nearby) resolution = resolveHistoryState(itinerary.itinerary ? 'arma mi itinerario' : message, history, states);
+            if (resolution.kind === 'general' && !nearby) resolution = resolveHistoryState(message, history, states, itinerary.itinerary || continuation, isItineraryContinuation, withoutLeadIns);
             // El estado heredado del historial solo aplica a continuaciones cortas o a mensajes con señal turística.
             if (!signal && !(resolution.kind === 'state' && (explicitState || continuation))) return { status: 'conversation', mode, places: [] };
             if (resolution.kind === 'ambiguous' || resolution.kind === 'unrecognized')
                 return { status: resolution.kind, mode, places: [] };
             if (itinerary.itinerary && intent === 'general') intent = (!explicitState || !directItinerary(message) ? itinerary.inheritedIntent : undefined) ?? 'attractions';
             if (itinerary.itinerary && resolution.kind !== 'state') return {status:'itinerary-missing-state', mode, intent, places:[]};
-            if (itinerary.itinerary && ['gastronomy','restaurants','dishes'].includes(intent)) return {status:'itinerary-food-unverified', mode, intent, places:[]};
+            if (itinerary.itinerary && (['gastronomy','restaurants','dishes'].includes(intent) || foodItinerary(message))) return {status:'itinerary-food-unverified', mode, intent, places:[]};
+            // Más de 7 días: se pide una duración válida (sin lista ni duración inventada). Se conserva el estado
+            // resuelto para el aviso; el siguiente mensaje («perdón, mejor 5 días») lo hereda del historial.
+            if (itinerary.itinerary && itinerary.duration.outOfRange) return { status: 'itinerary-days-out-of-range', mode: 'state', state: resolution.kind === 'state' ? resolution.state : undefined, intent, itinerary: true, itineraryDaysOutOfRange: true, places: [] };
             if (resolution.kind === 'state') {
                 mode = 'state';
                 state = resolution.state;
@@ -129,6 +140,16 @@ export class PlacesService {
                     const allowedIds = new Set(candidates.map(p => p.id));
                     raw = raw.filter(p => allowedIds.has(obj(p)?.id as string));
                 }
+                if (more) {
+                    // «¿Qué más?»: excluir lo ya mostrado en la respuesta anterior (identificado por nombre exacto).
+                    const shown = previousRecommendationIds(history, candidates);
+                    if (shown && shown.size) {
+                        raw = raw.filter(p => !shown.has(obj(p)?.id as string));
+                        // Ya se mostró todo lo que coincide: se dice así, sin repetir ni recurrir a otros estados.
+                        const remaining = raw.filter(p => (!state || obj(p)?.stateId === state.id) && (requestedType ? PlacesService.matchesRequestedType(p, requestedType, intent) : matchesIntent(p, intent)));
+                        if (!remaining.length) return { status: 'exhausted', mode, state, intent, itinerary: itinerary.itinerary, itineraryDays: itinerary.duration.days, places: [] };
+                    }
+                }
                 candidates = raw.filter(p => (!state || obj(p)?.stateId === state.id) && (requestedType ? PlacesService.matchesRequestedType(p, requestedType, intent) : matchesIntent(p, intent)) && (!itinerary.itinerary || intent === 'lodging' || !categoryNames(p).some(name => ['hospedaje','gastronomia'].includes(normalize(name))))).map(p => PlacesService.toSummary(p, states)).filter((p): p is PlaceSummary => p !== null);
                 if (mode === 'nearby') {
                     const hadMatches = candidates.length > 0;
@@ -141,9 +162,11 @@ export class PlacesService {
                 for (const p of candidates)
                     if (!unique.has(p.id))
                         unique.set(p.id, p);
-                const places = [...unique.values()].slice(0, mode === 'nearby' ? 10 : mode === 'state' ? 15 : 20);
-                if (requestedType && !places.length) return { status: 'type-unverified', mode, state, intent, requestedType, itinerary: itinerary.itinerary, places: [] };
-                return { status: places.length ? 'found' : 'empty', mode, state, intent, requestedType, itinerary: itinerary.itinerary, places };
+                // Itinerario por días: más candidatos (30) para cubrir hasta 21 paradas; siempre del estado ya filtrado.
+                const plannedItinerary = itinerary.itinerary && itinerary.duration.days !== undefined && mode === 'state';
+                const places = [...unique.values()].slice(0, mode === 'nearby' ? 10 : mode === 'state' ? (plannedItinerary ? ITINERARY_CANDIDATE_LIMIT : 15) : 20);
+                if (requestedType && !places.length) return { status: 'type-unverified', mode, state, intent, requestedType, itinerary: itinerary.itinerary, itineraryDays: itinerary.duration.days, places: [] };
+                return { status: places.length ? 'found' : 'empty', mode, state, intent, requestedType, itinerary: itinerary.itinerary, itineraryDays: itinerary.duration.days, itineraryDaysOutOfRange: itinerary.duration.outOfRange, places };
             }
 
         }

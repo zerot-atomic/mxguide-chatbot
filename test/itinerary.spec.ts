@@ -19,12 +19,12 @@ beforeEach(()=>{
   const u=new URL(String(url));if(u.origin!=='https://catalog.invalid')throw Error('Unexpected target');
   return new Response(JSON.stringify(u.pathname==='/states'?states:records.map(p=>({...p,stateId:u.searchParams.get('stateId')}))));
  });
- chat=new ChatService(config,[{name:'groq',isConfigured:()=>true,generate:async r=>{calls.push(r);return output??JSON.stringify({placeIds:JSON.parse(r.message).candidates.map((p:{id:string})=>p.id).slice(0,5)});}}],new PlacesService(config));
+ chat=new ChatService(config,[{name:'groq',isConfigured:()=>true,generate:async r=>{calls.push(r);return output??JSON.stringify({placeIds:JSON.parse(r.message).candidates.map((p:{id:string})=>p.id).slice(0,JSON.parse(r.message).maxPlaceIds??5)});}}],new PlacesService(config));
 });
 afterEach(()=>jest.restoreAllMocks());
 it.each(['Arma mi itinerario','Organízame un itinerario de un día para conocer Puebla','Hazme un itinerario turístico en Oaxaca','Planea una visita para conocer Veracruz','Quiero un recorrido cultural por Chiapas','Prepárame un plan para visitar lugares históricos de Yucatán'])('detecta solicitud %s',text=>expect(directItinerary(text)).toBe(true));
-it.each(states)('itinerario general dinámico y cinco paradas seguras en $name',async state=>{
- const result=await chat.chat({message:`Organízame un itinerario de un día para conocer ${state.name}`});
+it.each(states)('itinerario general dinámico y cinco paradas seguras en $name (sin duración)',async state=>{
+ const result=await chat.chat({message:`Organízame un itinerario para conocer ${state.name}`});
  expect(result.reply).toContain(`Itinerario sugerido para conocer ${state.name}`);
  expect(result.places.map(p=>p.id)).toEqual([0,1,2,3,4].map(n=>id(100+n)));
  expect(result.places.every(p=>p.state===state.name)).toBe(true);
@@ -33,10 +33,23 @@ it.each(states)('itinerario general dinámico y cinco paradas seguras en $name',
  expect(result.reply).toContain('Arquitectura colonial.');
  expect(result.reply).toContain('no representa una ruta optimizada');
  expect(result.reply).not.toMatch(/\b\d{1,2}:\d{2}\b|\d+ km|minutos de traslado|entrada gratis/);
- expect(result.reply).toContain('no garantiza que puedas visitar todas las paradas');
  expect(Object.keys(result).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);
  expect(JSON.parse(calls[0].message).candidates).toHaveLength(5);expect(calls[0].history).toEqual([]);
  expect(String(fetchMock.mock.calls[1][0])).toContain(`stateId=${state.id}&limit=100`);
+});
+it.each(states)('itinerario de un día con hasta tres paradas seguras en $name',async state=>{
+ const result=await chat.chat({message:`Organízame un itinerario de un día para conocer ${state.name}`});
+ expect(result.reply).toContain(`Itinerario sugerido para conocer ${state.name} en un día`);
+ expect(result.places.map(p=>p.id)).toEqual([0,1,2].map(n=>id(100+n)));
+ expect(result.places.every(p=>p.state===state.name)).toBe(true);
+ expect(result.reply).toContain('**Día 1**');
+ const lines=result.reply.split('\n').filter(l=>/^\d+\. /.test(l));
+ expect(lines.map((line,i)=>line.startsWith(`${i+1}. **${result.places[i].name}**`))).toEqual([true,true,true]);
+ expect(result.reply).toContain('no representa una ruta optimizada');
+ expect(result.reply).toContain('no garantiza que puedas visitarlas todas');
+ expect(result.reply).not.toMatch(/\b\d{1,2}:\d{2}\b|\d+ km|minutos de traslado|entrada gratis/);
+ expect(result.itinerary).toEqual({requestedDays:1,days:[{day:1,placeIds:[0,1,2].map(n=>id(100+n))}]});
+ expect(JSON.parse(calls[0].message).maxPlaceIds).toBe(3);expect(calls[0].history).toEqual([]);
 });
 it('Arma mi itinerario hereda estado y categoría histórica sin compartir historial',async()=>{
  const first=await chat.chat({message:'¿Qué lugares históricos hay en Oaxaca?'});
