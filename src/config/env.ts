@@ -19,6 +19,18 @@ export interface AppConfig {
   chatApiKey?: string;
   corsOrigins: string[];
   rateLimitPerMinute: number;
+  /** Nivel mínimo de logs: error < warn < log < debug < verbose. */
+  logLevel: LogLevelName;
+}
+
+export const LOG_LEVELS = ['error', 'warn', 'log', 'debug', 'verbose'] as const;
+export type LogLevelName = (typeof LOG_LEVELS)[number];
+/** Niveles activos para un nivel mínimo (formato de Nest: app.useLogger(levels)). */
+export function activeLogLevels(level: LogLevelName): LogLevelName[] {
+  return LOG_LEVELS.slice(0, LOG_LEVELS.indexOf(level) + 1);
+}
+export function logEnabled(config: Pick<AppConfig, 'logLevel'>, level: LogLevelName): boolean {
+  return LOG_LEVELS.indexOf(level) <= LOG_LEVELS.indexOf(config.logLevel ?? 'log');
 }
 
 const blankToUndefined = (value?: string) => (value && value.trim() ? value.trim() : undefined);
@@ -71,8 +83,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((o) => o.trim())
       .filter(Boolean),
     rateLimitPerMinute: toInt('RATE_LIMIT_PER_MINUTE', env.RATE_LIMIT_PER_MINUTE, 20, 1, 10000),
+    // En pruebas (NODE_ENV=test, lo fija Jest) solo errores, salvo que LOG_LEVEL se indique.
+    logLevel: oneOf('LOG_LEVEL', env.LOG_LEVEL, LOG_LEVELS, (env.NODE_ENV ?? process.env.NODE_ENV) === 'test' ? 'error' : 'log'),
   };
 }
 
 /** Token de inyección para la configuración. */
-export const APP_CONFIG = Symbol('APP_CONFIG');
+export const APP_CONFIG = Symbol('APP_CONFIG');

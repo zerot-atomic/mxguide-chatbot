@@ -8,7 +8,7 @@ import { ChatRequestDto } from './dto/chat-request.dto';
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  /** POST /chat → { reply, provider, places, suggestions } */
+  /** POST /chat → { reply, format, kind, code, provider, places, suggestions } (ver docs/chatbot/CONTRATO_RESPUESTAS.md) */
   @Post()
   @HttpCode(200)
   chat(@Body() dto: ChatRequestDto): Promise<ChatResponse> {

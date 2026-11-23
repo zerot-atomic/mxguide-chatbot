@@ -43,7 +43,7 @@ it('filtra antes del Top 10 con categorías enriquecidas simuladas; no implica s
  const chat = await new ChatService(config, [{name:'gemini',isConfigured:()=>true,generate}], service).chat({message:'atracciones turísticas cerca',location:{lat:0,lng:0}});
  expect(generate.mock.calls).toHaveLength(1);
  expect(chat.places[0].id).toBe(id(130));
- expect(Object.keys(chat).sort()).toEqual(['places','provider','reply','suggestions']);
+ expect(Object.keys(chat).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);
 });
 it('nearby real sin categorías informa limitación sin N+1 ni IA; general sigue funcionando', async () => {
  const raw = [place(1), place(2)].map(({categories: ignored, ...p}) => p);
@@ -97,7 +97,7 @@ it('regresión Puebla: comida típica fuera de los primeros 15 se recupera entre
  expect(lines).toHaveLength(15);
  expect(lines.map((p: {id:string})=>p.id)).toEqual(context.places.map(p=>p.id));
  expect(response.places.map(p => p.id)).toEqual([id(115)]);
- expect(Object.keys(response).sort()).toEqual(['places', 'provider', 'reply', 'suggestions']);
+ expect(Object.keys(response).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);
  // General queries keep the original recovery size, even in the same service instance.
  await service.getContext(undefined, '¿Qué lugares hay en Puebla?');
  expect(fetchMock.mock.calls.at(-1)![0]).toBe(`https://catalog.invalid/places?stateId=${puebla.id}&limit=15`);

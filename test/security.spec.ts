@@ -60,7 +60,7 @@ it('cancela la lectura cuando un stream supera el límite',async()=>{
 it('catálogo acota datos, rechaza enlaces como nombres y no sigue redirecciones',async()=>{
  expect(PlacesService.toSummary({...place,name:'https://phishing.invalid'})).toBeNull();
  const mock=jest.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{headers:{'content-length':String(3*1024*1024)}}));
- expect((await new PlacesService(config).getContext()).status).toBe('malformed');
+ expect((await new PlacesService(config).getContext(undefined, '¿Qué lugares me recomiendas?')).status).toBe('malformed');
  expect(mock.mock.calls[0][1]?.redirect).toBe('error');
 });
 it.each(['https://user:pass@catalog.invalid','https://catalog.invalid?token=fake','file:///tmp/catalog','https://catalog.invalid/#secret'])('valida destino configurado: %s',url=>{
@@ -106,7 +106,7 @@ describe('HTTP real local con configuración de producción y backend simulado',
   await start(100,null);
   // Explicitly remove the shared key from configuration; no new authentication requirements.
   const res=await request(app.getHttpServer()).post('/chat').send({message:'Museos de seguridad informática'}).expect(200);
-  expect(Object.keys(res.body).sort()).toEqual(['places','provider','reply','suggestions']);expect(JSON.stringify(res.body)).not.toContain('fake-');
+  expect(Object.keys(res.body).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);expect(JSON.stringify(res.body)).not.toContain('fake-');
  });
  it('rechaza falta de key cuando está configurada',async()=>{
   await start();await request(app.getHttpServer()).post('/chat').send({message:'hola'}).expect(401);expect(generate).not.toHaveBeenCalled();

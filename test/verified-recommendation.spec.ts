@@ -32,7 +32,9 @@ it('nombres iguales o contenidos no deciden las tarjetas', () => {
 });
 it('vacío válido no se sustituye por recomendaciones ni afirma ausencia global', () => {
  const result = verifiedRecommendation(json(),context);
- expect(result.places).toEqual([]); expect(result.reply).toContain('no significa');
+ expect(result.places).toEqual([]); expect(result.kind).toBe('empty');
+ // Acotado a los registros de MXGuide: nunca afirma que algo no exista en el mundo.
+ expect(result.reply).toContain('registrados en MXGuide'); expect(result.reply).not.toMatch(/no existen|no hay /);
 });
 it('datos incompletos no crean categorías, servicios o distancias', () => {
  const result = verifiedRecommendation(json(id(1)),{...context,places:[{...p(1),state:'',category:'',description:''}]});
@@ -76,5 +78,5 @@ it.each(['fallback','race'] as const)('%s no reintenta por formato inválido y p
  expect(result.reply).not.toContain('Atlantis');
  expect(generate).toHaveBeenCalledTimes(1);
  expect(other).toHaveBeenCalledTimes(strategy==='race'?1:0);
- expect(Object.keys(result).sort()).toEqual(['places','provider','reply','suggestions']);
+ expect(Object.keys(result).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);
 });

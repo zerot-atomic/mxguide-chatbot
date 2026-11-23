@@ -74,8 +74,10 @@ describe('catálogo HTTP simulado', () => {
     });
     it('mantiene destacados y cercanos con ubicación opcional', async () => {
         const service = backend([place(1, { distanceKm: 2 })]);
-        expect((await service.getContext(undefined, 'Hola')).mode).toBe('featured');
-        expect((await service.getContext({ lat: 0, lng: 0 }, 'Hola')).mode).toBe('nearby');
+        expect((await service.getContext(undefined, 'Hola')).status).toBe('conversation');
+        expect((await service.getContext({ lat: 0, lng: 0 }, 'Hola')).status).toBe('conversation');
+        expect((await service.getContext(undefined, '¿Qué lugares me recomiendas?')).mode).toBe('featured');
+        expect((await service.getContext({ lat: 0, lng: 0 }, '¿Qué lugares me recomiendas?')).mode).toBe('nearby');
     });
     it('usa solo una continuación inequívoca del usuario y prioriza el mensaje actual', async () => {
         const service = backend([]);
@@ -114,7 +116,8 @@ describe('catálogo HTTP simulado', () => {
     });
     it('rechaza envoltorios no verificados y configuración ausente', async () => {
         expect((await backend({ data: [] }).getContext(undefined, 'Chiapas')).status).toBe('malformed');
-        expect((await new PlacesService(loadConfig({ GEMINI_API_KEY: 'fake' })).getContext()).status).toBe('unconfigured');
+        expect((await new PlacesService(loadConfig({ GEMINI_API_KEY: 'fake' })).getContext(undefined, '¿Qué lugares me recomiendas?')).status).toBe('unconfigured');
+        expect((await new PlacesService(loadConfig({ GEMINI_API_KEY: 'fake' })).getContext(undefined, 'Hola')).status).toBe('conversation');
     });
     it('omite asociaciones de tarjetas con nombres ambiguos', () => {
         const a = PlacesService.toSummary(place(1))!;
@@ -139,7 +142,7 @@ describe('POST /chat con catálogo simulado y PlacesService real', () => {
         await app.init();
         try {
             const res = await request(app.getHttpServer()).post('/chat').send({ message: 'Chiapas', location: { lat: 19, lng: -99 } }).expect(200);
-            expect(Object.keys(res.body).sort()).toEqual(['places', 'provider', 'reply', 'suggestions']);
+            expect(Object.keys(res.body).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);
             expect(res.body.places[0]).toMatchObject({ id: id(101), state: 'Chiapas' });
             expect(res.body.provider).toBe('gemini');
             expect(res.body.suggestions[0]).not.toBe('Más lugares cerca');

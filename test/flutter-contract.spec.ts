@@ -25,12 +25,12 @@ async function start(key?:string,rate=100){
 }
 afterEach(async()=>{await app?.close();jest.restoreAllMocks();});
 function assertContract(body:Record<string,unknown>){
- expect(Object.keys(body).sort()).toEqual(['places','provider','reply','suggestions']);expect(typeof body.reply).toBe('string');
+ expect(Object.keys(body).sort()).toEqual(['code','format','kind','places','provider','reply','suggestions']);expect(typeof body.reply).toBe('string');
  expect(['groq','gemini']).toContain(body.provider);expect(Array.isArray(body.places)).toBe(true);
  expect(Array.isArray(body.suggestions)).toBe(true);expect((body.suggestions as unknown[]).every(s=>typeof s==='string')).toBe(true);
 }
 it('petición mínima y respuesta con tarjeta conservan contrato y campos opcionales',async()=>{
- await start();const res=await request(app.getHttpServer()).post('/chat').send({message:'Hola'}).expect(200);
+ await start();const res=await request(app.getHttpServer()).post('/chat').send({message:'¿Qué lugares me recomiendas?'}).expect(200);
  assertContract(res.body);expect(res.body.places).toEqual([{id,name:raw.name,state:'Puebla',category:'Histórico',description:raw.shortDescription}]);
  expect(res.body.places[0]).not.toHaveProperty('distanceKm');expect(calls).toHaveLength(1);
 });
@@ -52,19 +52,19 @@ it('consulta vacía válida es 200 con places vacío, no un error HTTP',async()=
  await start();empty=true;const res=await request(app.getHttpServer()).post('/chat').send({message:'Puebla'}).expect(200);
  assertContract(res.body);expect(res.body.places).toEqual([]);expect(calls).toHaveLength(0);
 });
-it('400 y 401 tienen exactamente statusCode y message sanitizados',async()=>{
+it('400 y 401 tienen statusCode, message y error sanitizados',async()=>{
  await start('ficticio-shared-key');
  const badKey=await request(app.getHttpServer()).post('/chat').send({message:'hola'}).expect(401);
- expect(badKey.body).toEqual({statusCode:401,message:'API key inválida'});
+ expect(badKey.body).toEqual({statusCode:401,message:'API key inválida',error:{code:'unauthorized',message:'API key inválida',retryable:false}});
  const badBody=await request(app.getHttpServer()).post('/chat').set('x-api-key','ficticio-shared-key').send({message:' '}).expect(400);
- expect(badBody.body).toEqual({statusCode:400,message:'Solicitud inválida.'});
+ expect(badBody.body).toEqual({statusCode:400,message:'Solicitud inválida.',error:{code:'invalid_request',message:'Solicitud inválida.',retryable:false}});
 });
 it('429 conserva el error HTTP diferenciado de un aviso local',async()=>{
- await start(undefined,1);await request(app.getHttpServer()).post('/chat').send({message:'hola'}).expect(200);
- const res=await request(app.getHttpServer()).post('/chat').send({message:'hola'}).expect(429);
- expect(res.body).toEqual({statusCode:429,message:'Demasiadas solicitudes. Intenta de nuevo en un momento.'});
+ await start(undefined,1);await request(app.getHttpServer()).post('/chat').send({message:'¿Qué lugares me recomiendas?'}).expect(200);
+ const res=await request(app.getHttpServer()).post('/chat').send({message:'¿Qué lugares me recomiendas?'}).expect(429);
+ expect(res.body).toEqual({statusCode:429,message:'Demasiadas solicitudes. Intenta de nuevo en un momento.',error:{code:'rate_limited',message:'Demasiadas solicitudes. Intenta de nuevo en un momento.',retryable:true}});
 });
 it('503 no expone errores del proveedor ni una respuesta de chat falsa',async()=>{
  await start();fail=true;const res=await request(app.getHttpServer()).post('/chat').send({message:'hola'}).expect(503);
- expect(res.body).toEqual({statusCode:503,message:'El asistente no está disponible en este momento.'});
+ expect(res.body).toEqual({statusCode:503,message:'El asistente no está disponible en este momento.',error:{code:'unavailable',message:'El asistente no está disponible en este momento.',retryable:true}});
 });

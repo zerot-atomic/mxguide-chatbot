@@ -1,4 +1,5 @@
 import { PlaceSummary } from './places.service';
+import { legacyEscaped, markdownSafe } from '../chat/response-contract';
 
 /** History can only narrow a fresh catalogue selection, never create records. */
 export function previousRecommendationIds(history: {role: string;content: string}[], candidates: PlaceSummary[]): Set<string> | null {
@@ -12,8 +13,9 @@ export function previousRecommendationIds(history: {role: string;content: string
   for (const rawLine of lines) {
     const line = rawLine.replace(/^[1-5]\. /, '- ');
     const matches = candidates.filter(p => {
-      const prefix = '- ' + p.name.replace(/[\r\n\t]/g, ' ').replace(/[<>*_`\[\]\\]/g, c => '\\' + c);
-      return line === prefix || [': ', ' (', ' · a '].some(separator => line.startsWith(prefix + separator));
+      // v2 escribe **Nombre**; v1 escapaba caracteres con "\\". Se aceptan ambos para historiales previos.
+      const prefixes = ['- **' + markdownSafe(p.name) + '**', '- ' + legacyEscaped(p.name)];
+      return prefixes.some(prefix => line === prefix || [': ', ' (', ' · a '].some(separator => line.startsWith(prefix + separator)));
     });
     // Stale/unmatched items are omitted; ambiguous names require clarification.
     if (matches.length > 1) return null;

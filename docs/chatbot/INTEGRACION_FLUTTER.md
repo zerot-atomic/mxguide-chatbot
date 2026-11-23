@@ -82,9 +82,11 @@ La ubicación se usa en NestJS para consultar nearby, no se envía como campo al
 
 ## Respuesta de chat: HTTP 200
 
+> **v2:** `reply` es Markdown limitado y hay campos nuevos `format`, `kind`, `code` y `error` en fallos. Ver [CONTRATO_RESPUESTAS.md](CONTRATO_RESPUESTAS.md); los ejemplos de abajo muestran solo los campos v1.
+
 | Campo | Tipo y significado |
 |---|---|
-| reply | String de presentación generado por NestJS, no prosa libre del modelo |
+| reply | String Markdown limitado generado por NestJS (ver CONTRATO_RESPUESTAS.md) |
 | provider | String `gemini` o `groq`; ver semántica limitada más abajo |
 | places | Array de cero a cinco tarjetas seleccionadas; fallback seguro puede mostrar hasta tres |
 | suggestions | Array de strings; son consultas sugeridas, no acciones ejecutables |

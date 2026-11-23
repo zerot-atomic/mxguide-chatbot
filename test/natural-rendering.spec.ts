@@ -17,7 +17,7 @@ it.each<[Intent,string]>([
  expect(result.places).toEqual([place]); expect(result.places[0]).toBe(place);
 });
 it('incluye solo la descripción original procedente de shortDescription', () => {
- expect(verifiedRecommendation(selected,context).reply).toContain('Casa del Alfeñique: Museo de arquitectura barroca poblana.');
+ expect(verifiedRecommendation(selected,context).reply).toContain('**Casa del Alfeñique**: Museo de arquitectura barroca poblana.');
  const noDescription = {...context,places:[{...place,description:''}]};
  expect(verifiedRecommendation(selected,noDescription).reply).not.toContain('arquitectura');
 });
@@ -36,7 +36,7 @@ it.each([
 ])('omite descripciones sensibles o sospechosas: %s', description => {
  const result = verifiedRecommendation(selected,{...context,places:[{...place,description}]});
  expect(result.reply).not.toContain(description);
- expect(result.reply.split('\n').find(l=>l.startsWith('- '))).toBe('- Casa del Alfeñique');
+ expect(result.reply.split('\n').find(l=>l.startsWith('- '))).toBe('- **Casa del Alfeñique**');
 });
 it('la gastronomía no convierte platillos en restaurantes', () => {
  const result = verifiedRecommendation(selected,{...context,intent:'dishes',places:[{...place,name:'Mole Poblano',category:'Gastronomía',description:'Platillo tradicional poblano.'}]});
