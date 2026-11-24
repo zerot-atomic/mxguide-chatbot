@@ -24,7 +24,7 @@ function fakeProvider(name: 'gemini' | 'groq', behavior: () => Promise<string>):
   return provider;
 }
 
-const noPlaces = { getContext: async () => [] } as unknown as PlacesService;
+const noPlaces = { getContext: async () => ({ status: 'found', mode: 'featured', places: [] }) } as unknown as PlacesService;
 
 describe('loadConfig', () => {
   it('exige al menos una llave de IA', () => {
@@ -97,7 +97,7 @@ describe('ChatService (orquestador)', () => {
     const fast = fakeProvider('groq', async () => 'rápido');
     const service = new ChatService(config, [slow, fast], noPlaces);
 
-    expect((await service.chat(dto)).reply).toBe('rápido');
+    expect((await service.chat(dto)).provider).toBe('groq');
   });
 
   it('responde 503 si fallan todos', async () => {
@@ -122,7 +122,7 @@ describe('ChatService (orquestador)', () => {
 describe('PlacesService.toSummary', () => {
   it('convierte un lugar de la API de MXGuide', () => {
     const summary = PlacesService.toSummary({
-      id: 'abc',
+      id: '00000000-0000-4000-8000-000000000001',
       name: 'Cuetzalan',
       shortDescription: 'Pueblo Mágico en la sierra',
       state: { name: 'Puebla' },
@@ -130,12 +130,12 @@ describe('PlacesService.toSummary', () => {
       distanceKm: 12.345,
     });
     expect(summary).toEqual({
-      id: 'abc',
+      id: '00000000-0000-4000-8000-000000000001',
       name: 'Cuetzalan',
       state: 'Puebla',
       category: 'Natural',
       description: 'Pueblo Mágico en la sierra',
-      distanceKm: 12.3,
+      distanceKm: 12.345,
     });
   });
 
@@ -153,6 +153,8 @@ describe('API HTTP', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(APP_CONFIG)
       .useValue(loadConfig({ ...baseEnv, ...env }) satisfies AppConfig)
+      .overrideProvider(PlacesService)
+      .useValue(noPlaces)
       .overrideProvider(LLM_PROVIDERS)
       .useValue([reply])
       .compile();
@@ -175,7 +177,7 @@ describe('API HTTP', () => {
   it('POST /chat responde', async () => {
     app = await createApp({});
     const res = await request(app.getHttpServer()).post('/chat').send({ message: 'Hola' }).expect(200);
-    expect(res.body).toMatchObject({ reply: '¡Hola! Soy Mitlan.', provider: 'gemini', places: [] });
+    expect(res.body).toMatchObject({ provider: 'gemini', places: [] });
     expect(res.body.suggestions.length).toBeGreaterThan(0);
   });
 

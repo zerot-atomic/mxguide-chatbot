@@ -1,3 +1,4 @@
+import { readBoundedJson } from '../../common/external-data';
 import { ProviderName } from '../../config/env';
 
 export type ChatRole = 'user' | 'assistant';
@@ -44,20 +45,16 @@ export async function fetchJson(
 ): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    response = await fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
-    const reason = error instanceof Error && error.name === 'TimeoutError' ? 'tiempo agotado' : 'sin conexión';
+    const reason = (error as {name?:string})?.name === 'TimeoutError' ? 'tiempo agotado' : 'sin conexión';
     throw new ProviderError(provider, reason);
   }
 
-  const text = await response.text();
   if (!response.ok) {
-    // No se reenvía el cuerpo al usuario: puede traer detalles internos.
-    throw new ProviderError(provider, `HTTP ${response.status}: ${text.slice(0, 300)}`, response.status);
+    await response.body?.cancel();
+    throw new ProviderError(provider, 'HTTP ' + response.status, response.status);
   }
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new ProviderError(provider, 'respuesta que no es JSON');
-  }
+  try { return await readBoundedJson(response, 256 * 1024); }
+  catch (error) { throw new ProviderError(provider, (error as {name?:string})?.name === 'TimeoutError' ? 'tiempo agotado' : 'respuesta inválida'); }
 }

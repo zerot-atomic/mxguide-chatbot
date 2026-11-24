@@ -19,6 +19,18 @@ export interface AppConfig {
   chatApiKey?: string;
   corsOrigins: string[];
   rateLimitPerMinute: number;
+  /** Nivel mínimo de logs: error < warn < log < debug < verbose. */
+  logLevel: LogLevelName;
+}
+
+export const LOG_LEVELS = ['error', 'warn', 'log', 'debug', 'verbose'] as const;
+export type LogLevelName = (typeof LOG_LEVELS)[number];
+/** Niveles activos para un nivel mínimo (formato de Nest: app.useLogger(levels)). */
+export function activeLogLevels(level: LogLevelName): LogLevelName[] {
+  return LOG_LEVELS.slice(0, LOG_LEVELS.indexOf(level) + 1);
+}
+export function logEnabled(config: Pick<AppConfig, 'logLevel'>, level: LogLevelName): boolean {
+  return LOG_LEVELS.indexOf(level) <= LOG_LEVELS.indexOf(config.logLevel ?? 'log');
 }
 
 const blankToUndefined = (value?: string) => (value && value.trim() ? value.trim() : undefined);
@@ -27,7 +39,7 @@ function toInt(name: string, raw: string | undefined, fallback: number, min: num
   if (raw === undefined || raw.trim() === '') return fallback;
   const value = Number(raw);
   if (!Number.isInteger(value) || value < min || value > max) {
-    throw new Error(`${name} debe ser un entero entre ${min} y ${max} (recibí "${raw}")`);
+    throw new Error(`${name} debe ser un entero entre ${min} y ${max} `);
   }
   return value;
 }
@@ -36,7 +48,7 @@ function oneOf<T extends string>(name: string, raw: string | undefined, options:
   const value = blankToUndefined(raw)?.toLowerCase();
   if (!value) return fallback;
   if (!options.includes(value as T)) {
-    throw new Error(`${name} debe ser uno de: ${options.join(', ')} (recibí "${raw}")`);
+    throw new Error(`${name} debe ser uno de: ${options.join(', ')} `);
   }
   return value as T;
 }
@@ -49,8 +61,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const apiUrl = blankToUndefined(env.MXGUIDE_API_URL)?.replace(/\/+$/, '');
-  if (apiUrl && !/^https?:\/\//.test(apiUrl)) {
-    throw new Error('MXGUIDE_API_URL debe empezar con http:// o https://');
+  if (apiUrl) {
+    let url: URL;
+    try { url = new URL(apiUrl); } catch { throw new Error('MXGUIDE_API_URL inválida'); }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('MXGUIDE_API_URL requiere http/https sin credenciales, query o fragmento');
   }
 
   return {
@@ -69,8 +83,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((o) => o.trim())
       .filter(Boolean),
     rateLimitPerMinute: toInt('RATE_LIMIT_PER_MINUTE', env.RATE_LIMIT_PER_MINUTE, 20, 1, 10000),
+    // En pruebas (NODE_ENV=test, lo fija Jest) solo errores, salvo que LOG_LEVEL se indique.
+    logLevel: oneOf('LOG_LEVEL', env.LOG_LEVEL, LOG_LEVELS, (env.NODE_ENV ?? process.env.NODE_ENV) === 'test' ? 'error' : 'log'),
   };
 }
 
 /** Token de inyección para la configuración. */
-export const APP_CONFIG = Symbol('APP_CONFIG');
+export const APP_CONFIG = Symbol('APP_CONFIG');
